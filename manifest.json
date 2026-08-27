@@ -1,0 +1,16 @@
+{
+  "name": "Bonded Store Ledger",
+  "short_name": "Bonded Store",
+  "description": "Tally crew purchases, print receipts, and total monthly payroll deductions.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1E9D8",
+  "theme_color": "#16233A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
