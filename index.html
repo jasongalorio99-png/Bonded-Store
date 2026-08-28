@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -47,7 +47,6 @@
     min-height:100vh;
     min-height:100dvh;
     max-width:100vw;
-    overflow-x:hidden;
   }
   .sidebar{
     width:210px;
@@ -483,8 +482,9 @@
     selectedCrewId: null,
     declareCrewId: null,
     tab: 'sell',
-    settings: {defaultCutoffDay: 1, periodCutoffs: {}},
+    settings: {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null},
     cutoffEditMonth: monthKey(new Date()),
+    customRange: {enabled: false, start: '', end: ''},
     viewMonth: monthKey(new Date()),
     lastReceipt: null
   };
@@ -527,6 +527,61 @@
   }
   function fmtMoney(n){
     return '$' + (Math.round(n*100)/100).toFixed(2);
+  }
+  // Calendar months (YYYY-MM) spanning startStr..endStr (YYYY-MM-DD), plus one trailing
+  // buffer month — since a sale can be bucketed one month ahead of its real date when a
+  // month's own cut-off pushes it forward, the buffer guarantees full coverage.
+  function monthsBetween(startStr, endStr){
+    var start = new Date(startStr + 'T00:00:00');
+    var end = new Date(endStr + 'T00:00:00');
+    var cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    var endMonth = new Date(end.getFullYear(), end.getMonth()+1, 1);
+    var months = [];
+    while(cursor <= endMonth){
+      months.push(monthKey(cursor));
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+    }
+    return months;
+  }
+  async function ensureRangeLoaded(startStr, endStr){
+    var months = monthsBetween(startStr, endStr);
+    for(var i=0;i<months.length;i++){
+      await ensureMonthLoaded(months[i]);
+    }
+  }
+  function txnsForCustomRange(startStr, endStr){
+    var months = monthsBetween(startStr, endStr);
+    var start = new Date(startStr + 'T00:00:00');
+    var end = new Date(endStr + 'T23:59:59.999');
+    var all = [];
+    months.forEach(function(mk){
+      (state.monthTxns[mk] || []).forEach(function(t){
+        var d = new Date(t.dateISO);
+        if(d >= start && d <= end) all.push(t);
+      });
+    });
+    return all.sort(function(a,b){ return new Date(a.dateISO) - new Date(b.dateISO); });
+  }
+  function formatDateRangeLabel(startStr, endStr){
+    var s = new Date(startStr + 'T00:00:00');
+    var e = new Date(endStr + 'T00:00:00');
+    return s.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}) + ' – ' + e.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  }
+  // Loads every stored sale bucket up front (cheap for an on-device store ledger) so the
+  // Items tab can compute "sold since last reset" across all history, not just one period.
+  async function ensureAllTxnsLoaded(){
+    try{
+      var res = await window.storage.list('txns:', false);
+      var keys = (res && res.keys) || [];
+      for(var i=0;i<keys.length;i++){
+        var mk = keys[i].slice('txns:'.length);
+        if(!state.monthTxns[mk]){
+          state.monthTxns[mk] = await storageGet(keys[i], []);
+        }
+      }
+    }catch(e){
+      console.error('ensureAllTxnsLoaded failed', e);
+    }
   }
   function uid(){
     return Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -574,12 +629,13 @@
     state.crew = await storageGet('crew', []);
     var rawSettings = await storageGet('settings', null);
     if(!rawSettings){
-      state.settings = {defaultCutoffDay: 1, periodCutoffs: {}};
+      state.settings = {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null};
     }else{
       // migrate the old single-cutoffDay format if present
       state.settings = {
         defaultCutoffDay: rawSettings.defaultCutoffDay != null ? rawSettings.defaultCutoffDay : (rawSettings.cutoffDay != null ? rawSettings.cutoffDay : 1),
-        periodCutoffs: rawSettings.periodCutoffs || {}
+        periodCutoffs: rawSettings.periodCutoffs || {},
+        stockCycleStart: rawSettings.stockCycleStart || null
       };
       if(rawSettings.cutoffDay != null && rawSettings.defaultCutoffDay == null){
         await storageSet('settings', state.settings);
@@ -589,6 +645,7 @@
     state.viewMonth = periodKeyForDate(new Date());
     state.monthTxns[state.viewMonth] = await storageGet('txns:' + state.viewMonth, []);
     state.declarations[state.viewMonth] = await storageGet('decl:' + state.viewMonth, []);
+    await ensureAllTxnsLoaded();
     render();
   }
 
@@ -724,19 +781,27 @@
     '</div>';
   }
 
-  function soldThisPeriodByItem(){
-    var pk = periodKeyForDate(new Date());
+  // Items sold since the last stock-count reset (or since the very first sale, if never reset).
+  // Intentionally independent of the payroll cut-off period — this is about physical stock, not deduction cycles.
+  function soldSinceCycleStart(){
+    var baselineISO = state.settings.stockCycleStart;
+    var baseline = baselineISO ? new Date(baselineISO) : null;
     var sold = {};
-    (state.monthTxns[pk] || []).forEach(function(t){
-      t.items.forEach(function(i){
-        sold[i.itemId] = (sold[i.itemId] || 0) + i.qty;
+    Object.keys(state.monthTxns).forEach(function(mk){
+      (state.monthTxns[mk] || []).forEach(function(t){
+        var d = new Date(t.dateISO);
+        if(!baseline || d > baseline){
+          t.items.forEach(function(i){
+            sold[i.itemId] = (sold[i.itemId] || 0) + i.qty;
+          });
+        }
       });
     });
     return sold;
   }
 
   function renderItems(){
-    var sold = soldThisPeriodByItem();
+    var sold = soldSinceCycleStart();
     var totalValue = 0;
     var rows = state.catalog.map(function(it){
       var opening = it.openingStock || 0;
@@ -751,6 +816,9 @@
         '<td class="row-actions"><button class="icon-btn" data-del-item="'+it.id+'">Remove</button></td></tr>';
     }).join('');
     if(!state.catalog.length) rows = '<tr><td colspan="7" class="empty-note">No items yet.</td></tr>';
+    var lastReset = state.settings.stockCycleStart
+      ? ('Last reset: ' + new Date(state.settings.stockCycleStart).toLocaleString())
+      : 'Never reset yet — Sold is currently counting from the very first sale.';
     return ''+
     '<h2 class="page-title">Inventory</h2>'+
     '<p class="page-sub">Set the opening stock for the start of the period. Sold and remaining update automatically as sales come in from the Sell tab.</p>'+
@@ -763,6 +831,13 @@
         '<input type="number" id="newItemPrice" placeholder="Price" min="0" step="0.01" style="max-width:100px;">'+
         '<button class="btn btn-teal" id="addItemBtn">Add item</button>'+
       '</div>'+
+    '</div>'+
+    '<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">'+
+      '<div style="max-width:560px;">'+
+        '<h3 style="margin:0 0 4px;">End-of-period reset</h3>'+
+        '<p class="settings-note" style="margin:0;">Moves each item\'s current remaining stock into Opening stock, and Sold starts counting from zero again. Use this once you\'ve done a physical stock count — it\'s independent of the payroll cut-off date. '+lastReset+'</p>'+
+      '</div>'+
+      '<button class="btn btn-stamp" id="resetStockBtn">Reset stock count</button>'+
     '</div>'+
     '<div class="grand-total-card"><span class="label">Total inventory value (remaining stock)</span><span class="amt">'+fmtMoney(totalValue)+'</span></div>';
   }
@@ -839,7 +914,10 @@
 
   function renderReports(){
     var mk = state.viewMonth;
-    var txns = state.monthTxns[mk] || [];
+    var rangeInvalid = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && state.customRange.start > state.customRange.end);
+    var usingCustom = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && !rangeInvalid);
+    var txns = usingCustom ? txnsForCustomRange(state.customRange.start, state.customRange.end) : (state.monthTxns[mk] || []);
+    var periodTitle = usingCustom ? formatDateRangeLabel(state.customRange.start, state.customRange.end) : periodLabel(mk);
     var byCrew = {};
     txns.forEach(function(t){
       byCrew[t.crewId] = byCrew[t.crewId] || {name:t.crewName, total:0, count:0};
@@ -852,7 +930,7 @@
       var c = byCrew[id];
       return '<tr><td>'+escapeHtml(c.name)+'</td><td>'+c.count+'</td><td class="month-total">'+fmtMoney(c.total)+'</td></tr>';
     }).join('');
-    if(!Object.keys(byCrew).length) rows = '<tr><td colspan="3" class="empty-note">No sales recorded for this month.</td></tr>';
+    if(!Object.keys(byCrew).length) rows = '<tr><td colspan="3" class="empty-note">No sales recorded for this period.</td></tr>';
 
     // Itemized breakdown: for each crew, what they bought this period, quantities and line totals.
     var byCrewItems = {};
@@ -929,22 +1007,37 @@
     '</div>'+
     '<div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'+
       '<label style="font-size:13px;color:var(--grey);">Period</label>'+
-      '<select id="monthSelect">'+monthOptions.join('')+'</select>'+
+      '<select id="monthSelect"'+(usingCustom?' disabled':'')+'>'+monthOptions.join('')+'</select>'+
+      (usingCustom ? '<span class="settings-note" style="margin:0;">Ignored while a custom range is active below.</span>' : '')+
       '<button class="btn btn-outline" id="printReportBtn" style="margin-left:auto;">Print report</button>'+
     '</div>'+
-    '<div class="grand-total-card"><span class="label">Total to deduct — '+periodLabel(mk)+'</span><span class="amt">'+fmtMoney(grand)+'</span></div>'+
+    '<div class="card">'+
+      '<h3>Advanced: custom period</h3>'+
+      '<p class="settings-note" style="margin:0 0 12px;">Pick an exact start and end date — e.g. Aug 16 to Sep 15 — for a live breakdown of that range, independent of your usual cut-off.</p>'+
+      '<label style="font-size:13px;color:var(--grey);display:flex;align-items:center;gap:7px;"><input type="checkbox" id="customRangeToggle" style="width:auto;"'+(state.customRange.enabled?' checked':'')+'> Use custom range</label>'+
+      (state.customRange.enabled ? (
+        '<div class="add-row" style="margin-top:12px;">'+
+          '<label style="font-size:13px;color:var(--grey);">Start</label>'+
+          '<input type="date" id="customRangeStart" value="'+(state.customRange.start||'')+'" style="max-width:170px;">'+
+          '<label style="font-size:13px;color:var(--grey);">End</label>'+
+          '<input type="date" id="customRangeEnd" value="'+(state.customRange.end||'')+'" style="max-width:170px;">'+
+        '</div>'+
+        (rangeInvalid ? '<p class="settings-note" style="color:#B3261E;">End date must be on or after the start date.</p>' : '')
+      ) : '')+
+    '</div>'+
+    '<div class="grand-total-card"><span class="label">Total to deduct — '+periodTitle+'</span><span class="amt">'+fmtMoney(grand)+'</span></div>'+
     '<div class="card" id="reportPrintArea">'+
       '<div id="crewSummaryTable">'+
         '<h3>Deduction by crew member</h3>'+
         '<div class="table-wrap"><table class="plain"><thead><tr><th>Crew</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
       '</div>'+
       '<div class="itemized-breakdown" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);">'+
-        '<h3>Itemized purchases by crew — '+periodLabel(mk)+'</h3>'+
+        '<h3>Itemized purchases by crew — '+periodTitle+'</h3>'+
         crewStatementsHtml+
       '</div>'+
     '</div>'+
     '<div class="card">'+
-      '<h3>All transactions this month</h3>'+
+      '<h3>All transactions — '+periodTitle+'</h3>'+
       '<div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Crew</th><th>Items</th><th>Total</th><th></th></tr></thead><tbody>'+txnRows+'</tbody></table></div>'+
     '</div>';
   }
@@ -1008,6 +1101,8 @@
         updateOpeningStock(el.dataset.stock, el.value);
       });
     });
+    var resetStockBtn = document.getElementById('resetStockBtn');
+    if(resetStockBtn) resetStockBtn.addEventListener('click', resetStockCount);
 
     var declareCrewSelect = document.getElementById('declareCrewSelect');
     if(declareCrewSelect) declareCrewSelect.addEventListener('change', function(){
@@ -1044,6 +1139,31 @@
     if(printReportBtn) printReportBtn.addEventListener('click', function(){ printFullReport(); });
     main.querySelectorAll('[data-print-crew]').forEach(function(el){
       el.addEventListener('click', function(){ printSingleCrewStatement(el.dataset.printCrew); });
+    });
+
+    var customRangeToggle = document.getElementById('customRangeToggle');
+    if(customRangeToggle) customRangeToggle.addEventListener('change', async function(){
+      state.customRange.enabled = customRangeToggle.checked;
+      if(state.customRange.enabled && state.customRange.start && state.customRange.end){
+        await ensureRangeLoaded(state.customRange.start, state.customRange.end);
+      }
+      render();
+    });
+    var customRangeStart = document.getElementById('customRangeStart');
+    if(customRangeStart) customRangeStart.addEventListener('change', async function(){
+      state.customRange.start = customRangeStart.value;
+      if(state.customRange.start && state.customRange.end){
+        await ensureRangeLoaded(state.customRange.start, state.customRange.end);
+      }
+      render();
+    });
+    var customRangeEnd = document.getElementById('customRangeEnd');
+    if(customRangeEnd) customRangeEnd.addEventListener('change', async function(){
+      state.customRange.end = customRangeEnd.value;
+      if(state.customRange.start && state.customRange.end){
+        await ensureRangeLoaded(state.customRange.start, state.customRange.end);
+      }
+      render();
     });
 
     var saveCutoffBtn = document.getElementById('saveCutoffBtn');
@@ -1099,6 +1219,20 @@
       it.openingStock = val;
       await storageSet('catalog', state.catalog);
     }
+    render();
+  }
+
+  async function resetStockCount(){
+    if(!confirm('Reset stock count? This moves each item\'s current remaining stock into Opening stock, and Sold will start counting from zero again. This cannot be undone.')) return;
+    var sold = soldSinceCycleStart();
+    state.catalog.forEach(function(it){
+      var soldQty = sold[it.id] || 0;
+      var remaining = (it.openingStock || 0) - soldQty;
+      it.openingStock = remaining;
+    });
+    state.settings.stockCycleStart = new Date().toISOString();
+    await storageSet('catalog', state.catalog);
+    await storageSet('settings', state.settings);
     render();
   }
 
