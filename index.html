@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -356,6 +356,17 @@
     .receipt-slip{position:absolute;top:0;left:0;box-shadow:none;}
     .receipt-actions{display:none;}
   }
+  @media print{
+    body.printing-report *{visibility:hidden;}
+    body.printing-report #reportPrintArea, body.printing-report #reportPrintArea *{visibility:visible;}
+    body.printing-report #reportPrintArea{position:absolute;top:0;left:0;width:100%;padding:0;border:none;background:#fff;}
+    .no-print{display:none !important;}
+  }
+  .crew-statement{margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid var(--line-soft);}
+  .crew-statement:last-child{border-bottom:none;margin-bottom:0;}
+  .crew-statement-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .crew-statement-head h4{margin:0;font-size:14px;color:var(--ink-2);}
+  .crew-statement-total{display:flex;justify-content:space-between;font-weight:600;font-size:13.5px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);}
   .msg-empty{
     text-align:center;color:var(--grey);font-size:13px;padding:30px 10px;
   }
@@ -369,6 +380,9 @@
   }
   .sell-layout{display:grid;grid-template-columns:1fr 280px;gap:20px;align-items:start;}
   @media (max-width:900px){.sell-layout{grid-template-columns:1fr;}}
+  .crew-select{width:100%;max-width:320px;}
+  .stock-input{width:78px;}
+  .settings-note{margin:8px 0 0;flex-basis:100%;color:var(--grey);font-size:12.5px;}
 </style>
 </head>
 <body>
@@ -384,7 +398,8 @@
       <button data-tab="sell" class="active"><span class="nav-num">01</span>Sell</button>
       <button data-tab="crew"><span class="nav-num">02</span>Crew</button>
       <button data-tab="items"><span class="nav-num">03</span>Items</button>
-      <button data-tab="reports"><span class="nav-num">04</span>Reports</button>
+      <button data-tab="declare"><span class="nav-num">04</span>Declare</button>
+      <button data-tab="reports"><span class="nav-num">05</span>Reports</button>
     </nav>
   </aside>
 
@@ -448,15 +463,53 @@
     catalog: [],
     crew: [],
     monthTxns: {},
+    declarations: {},
     cart: {},
+    declareCart: {},
     selectedCrewId: null,
+    declareCrewId: null,
     tab: 'sell',
+    settings: {defaultCutoffDay: 1, periodCutoffs: {}},
+    cutoffEditMonth: monthKey(new Date()),
     viewMonth: monthKey(new Date()),
     lastReceipt: null
   };
 
   function monthKey(d){
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+  // The cut-off day in effect for a given SOURCE calendar month (the month sales actually happen in).
+  // Falls back to settings.defaultCutoffDay when that month has no explicit override.
+  function getCutoffForMonth(mk){
+    var override = state.settings.periodCutoffs && state.settings.periodCutoffs[mk];
+    if(override != null) return override;
+    return (state.settings && state.settings.defaultCutoffDay) || 1;
+  }
+  // Billing-period key: a sale rolls into next month's period once it's made after
+  // that source month's own cut-off day. cutoff <= 1 means plain calendar-month behaviour.
+  function periodKeyForDate(d){
+    var mk0 = monthKey(d);
+    var cutoff = getCutoffForMonth(mk0);
+    if(cutoff <= 1) return mk0;
+    if(d.getDate() > cutoff) return monthKey(new Date(d.getFullYear(), d.getMonth()+1, 1));
+    return mk0;
+  }
+  // Human label for a period key, showing the actual date range it spans given
+  // each contributing month's own cut-off (previous month's tail + this month's head).
+  function periodLabel(mk){
+    var parts = mk.split('-');
+    var y = +parts[0], m = +parts[1]-1;
+    var cutoffThis = getCutoffForMonth(mk);
+    var prevDate = new Date(y, m-1, 1);
+    var prevMk = monthKey(prevDate);
+    var cutoffPrev = getCutoffForMonth(prevMk);
+    if(cutoffThis <= 1 && cutoffPrev <= 1){
+      return new Date(y,m,1).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    }
+    var startDay = cutoffPrev <= 1 ? 1 : cutoffPrev+1;
+    var startDate = new Date(prevDate.getFullYear(), prevDate.getMonth(), startDay);
+    var endDate = cutoffThis <= 1 ? new Date(y, m+1, 0) : new Date(y, m, cutoffThis);
+    return startDate.toLocaleDateString(undefined,{month:'short',day:'numeric'}) + ' – ' + endDate.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
   }
   function fmtMoney(n){
     return '$' + (Math.round(n*100)/100).toFixed(2);
@@ -475,10 +528,10 @@
   }
 
   var DEFAULT_CATALOG = [
-    {id:uid(), category:'Cigarettes', name:'Pack of cigarettes', price:5.00},
-    {id:uid(), category:'Soft Drinks', name:'Soft drink 330ml', price:1.00},
-    {id:uid(), category:'Chocolates', name:'Chocolate bar', price:1.50},
-    {id:uid(), category:'Chips', name:'Bag of chips', price:1.00}
+    {id:uid(), category:'Cigarettes', name:'Pack of cigarettes', price:5.00, openingStock:0},
+    {id:uid(), category:'Soft Drinks', name:'Soft drink 330ml', price:1.00, openingStock:0},
+    {id:uid(), category:'Chocolates', name:'Chocolate bar', price:1.50, openingStock:0},
+    {id:uid(), category:'Chips', name:'Bag of chips', price:1.00, openingStock:0}
   ];
 
   async function storageGet(key, fallback, shared){
@@ -505,13 +558,34 @@
       await storageSet('catalog', state.catalog);
     }
     state.crew = await storageGet('crew', []);
+    var rawSettings = await storageGet('settings', null);
+    if(!rawSettings){
+      state.settings = {defaultCutoffDay: 1, periodCutoffs: {}};
+    }else{
+      // migrate the old single-cutoffDay format if present
+      state.settings = {
+        defaultCutoffDay: rawSettings.defaultCutoffDay != null ? rawSettings.defaultCutoffDay : (rawSettings.cutoffDay != null ? rawSettings.cutoffDay : 1),
+        periodCutoffs: rawSettings.periodCutoffs || {}
+      };
+      if(rawSettings.cutoffDay != null && rawSettings.defaultCutoffDay == null){
+        await storageSet('settings', state.settings);
+      }
+    }
+    state.cutoffEditMonth = monthKey(new Date());
+    state.viewMonth = periodKeyForDate(new Date());
     state.monthTxns[state.viewMonth] = await storageGet('txns:' + state.viewMonth, []);
+    state.declarations[state.viewMonth] = await storageGet('decl:' + state.viewMonth, []);
     render();
   }
 
   async function ensureMonthLoaded(mk){
     if(!state.monthTxns[mk]){
       state.monthTxns[mk] = await storageGet('txns:' + mk, []);
+    }
+  }
+  async function ensureDeclarationsLoaded(mk){
+    if(!state.declarations[mk]){
+      state.declarations[mk] = await storageGet('decl:' + mk, []);
     }
   }
 
@@ -533,17 +607,18 @@
     if(state.tab === 'sell') main.innerHTML = renderSell();
     else if(state.tab === 'crew') main.innerHTML = renderCrew();
     else if(state.tab === 'items') main.innerHTML = renderItems();
+    else if(state.tab === 'declare') main.innerHTML = renderDeclare();
     else if(state.tab === 'reports') main.innerHTML = renderReports();
     bindTabEvents();
   }
 
   function renderSell(){
-    var crewChips = state.crew.map(function(c){
-      return '<button class="crew-chip'+(state.selectedCrewId===c.id?' selected':'')+'" data-crew="'+c.id+'">'+escapeHtml(c.name)+'</button>';
+    var crewOptions = '<option value="">— Select crew member —</option>' + state.crew.map(function(c){
+      return '<option value="'+c.id+'"'+(state.selectedCrewId===c.id?' selected':'')+'>'+escapeHtml(c.name)+'</option>';
     }).join('');
-    if(!state.crew.length){
-      crewChips = '<div class="empty-note">No crew added yet. Go to the Crew tab to add names.</div>';
-    }
+    var crewChips = state.crew.length
+      ? '<select id="crewSelect" class="crew-select">'+crewOptions+'</select>'
+      : '<div class="empty-note">No crew added yet. Go to the Crew tab to add names.</div>';
 
     var cats = {};
     state.catalog.forEach(function(it){
@@ -583,7 +658,7 @@
     var selectedCrew = state.crew.find(function(c){return c.id===state.selectedCrewId;});
     var canComplete = selectedCrew && cartEntries.length>0;
 
-    var mk = monthKey(new Date());
+    var mk = periodKeyForDate(new Date());
     var todays = (state.monthTxns[mk] || []).filter(function(t){
       var d = new Date(t.dateISO);
       return d.toDateString() === new Date().toDateString();
@@ -597,7 +672,7 @@
     }).join('') : '<tr><td colspan="4" class="empty-note">No sales recorded yet today.</td></tr>';
 
     return ''+
-    '<h2 class="page-title">Open the store</h2>'+
+    '<h2 class="page-title">Slopchest</h2>'+
     '<p class="page-sub">'+todayStr()+' — pick the crew member, tap what they take, then complete the sale.</p>'+
     '<div class="sell-layout">'+
       '<div>'+
@@ -635,25 +710,116 @@
     '</div>';
   }
 
+  function soldThisPeriodByItem(){
+    var pk = periodKeyForDate(new Date());
+    var sold = {};
+    (state.monthTxns[pk] || []).forEach(function(t){
+      t.items.forEach(function(i){
+        sold[i.itemId] = (sold[i.itemId] || 0) + i.qty;
+      });
+    });
+    return sold;
+  }
+
   function renderItems(){
+    var sold = soldThisPeriodByItem();
+    var totalValue = 0;
     var rows = state.catalog.map(function(it){
+      var opening = it.openingStock || 0;
+      var soldQty = sold[it.id] || 0;
+      var remaining = opening - soldQty;
+      totalValue += remaining * it.price;
       return '<tr><td>'+escapeHtml(it.category)+'</td><td>'+escapeHtml(it.name)+'</td>'+
         '<td class="month-total">'+fmtMoney(it.price)+'</td>'+
+        '<td><input type="number" class="stock-input" min="0" step="1" value="'+opening+'" data-stock="'+it.id+'"></td>'+
+        '<td class="month-total">'+soldQty+'</td>'+
+        '<td class="month-total">'+remaining+'</td>'+
         '<td class="row-actions"><button class="icon-btn" data-del-item="'+it.id+'">Remove</button></td></tr>';
     }).join('');
-    if(!state.catalog.length) rows = '<tr><td colspan="4" class="empty-note">No items yet.</td></tr>';
+    if(!state.catalog.length) rows = '<tr><td colspan="7" class="empty-note">No items yet.</td></tr>';
     return ''+
-    '<h2 class="page-title">Items &amp; prices</h2>'+
-    '<p class="page-sub">Keep your stock and prices up to date — this feeds both the Sell screen and receipts.</p>'+
+    '<h2 class="page-title">Inventory</h2>'+
+    '<p class="page-sub">Set the opening stock for the start of the period. Sold and remaining update automatically as sales come in from the Sell tab.</p>'+
     '<div class="card">'+
-      '<h3>Catalog</h3>'+
-      '<table class="plain"><thead><tr><th>Category</th><th>Item</th><th>Price</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<h3>Stock</h3>'+
+      '<table class="plain"><thead><tr><th>Category</th><th>Item</th><th>Price</th><th>Opening stock</th><th>Sold</th><th>Remaining</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '<div class="add-row">'+
         '<input type="text" id="newItemCat" placeholder="Category (e.g. Cigarettes)" style="max-width:170px;">'+
         '<input type="text" id="newItemName" placeholder="Item name">'+
         '<input type="number" id="newItemPrice" placeholder="Price" min="0" step="0.01" style="max-width:100px;">'+
         '<button class="btn btn-teal" id="addItemBtn">Add item</button>'+
       '</div>'+
+    '</div>'+
+    '<div class="grand-total-card"><span class="label">Total inventory value (remaining stock)</span><span class="amt">'+fmtMoney(totalValue)+'</span></div>';
+  }
+
+  function renderDeclare(){
+    var crewOptions = '<option value="">— Select crew member —</option>' + state.crew.map(function(c){
+      return '<option value="'+c.id+'"'+(state.declareCrewId===c.id?' selected':'')+'>'+escapeHtml(c.name)+'</option>';
+    }).join('');
+    var crewSelectHtml = state.crew.length
+      ? '<select id="declareCrewSelect" class="crew-select">'+crewOptions+'</select>'
+      : '<div class="empty-note">No crew added yet. Go to the Crew tab to add names.</div>';
+
+    var cats = {};
+    state.catalog.forEach(function(it){
+      cats[it.category] = cats[it.category] || [];
+      cats[it.category].push(it);
+    });
+    var catsHtml = Object.keys(cats).map(function(cat){
+      var tiles = cats[cat].map(function(it){
+        var qty = state.declareCart[it.id] || 0;
+        return '<div class="item-tile">'+
+          '<div class="name">'+escapeHtml(it.name)+'</div>'+
+          '<div class="price">'+fmtMoney(it.price)+'</div>'+
+          '<div class="qty-row">'+
+            '<button class="qty-btn minus" data-decl-minus="'+it.id+'">-</button>'+
+            '<span class="qty-val">'+qty+'</span>'+
+            '<button class="qty-btn" data-decl-plus="'+it.id+'">+</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+      return '<div class="cat-block"><div class="cat-label">'+escapeHtml(cat)+'</div><div class="item-grid">'+tiles+'</div></div>';
+    }).join('');
+    if(!state.catalog.length) catsHtml = '<div class="empty-note">No items in your catalog yet. Go to the Items tab to add stock.</div>';
+
+    var cartEntries = Object.keys(state.declareCart).filter(function(id){return state.declareCart[id]>0;});
+    var cartLines = cartEntries.map(function(id){
+      var it = state.catalog.find(function(x){return x.id===id;});
+      if(!it) return '';
+      return '<div class="cart-line"><span>'+escapeHtml(it.name)+'</span><span class="qty">x'+state.declareCart[id]+'</span></div>';
+    }).join('');
+
+    var selectedCrew = state.crew.find(function(c){return c.id===state.declareCrewId;});
+    var canSave = selectedCrew && cartEntries.length>0;
+
+    var pk = periodKeyForDate(new Date());
+    var list = state.declarations[pk] || [];
+    var listHtml = list.length ? list.slice().reverse().map(function(dcl){
+      var d = new Date(dcl.dateISO);
+      var itemsStr = dcl.items.map(function(i){return escapeHtml(i.name)+' x'+i.qty;}).join(', ');
+      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(dcl.crewName)+'</td><td>'+itemsStr+'</td>'+
+        '<td class="row-actions"><button class="icon-btn" data-del-decl="'+dcl.id+'">Remove</button></td></tr>';
+    }).join('') : '<tr><td colspan="4" class="empty-note">No declarations recorded this period.</td></tr>';
+
+    return ''+
+    '<h2 class="page-title">Crew declaration</h2>'+
+    '<p class="page-sub">Log items handed out to crew as a declared allowance (e.g. cigarettes). These are kept on record but are not charged to the crew member and do not reduce inventory stock.</p>'+
+    '<div class="sell-layout">'+
+      '<div>'+
+        '<div class="card"><h3>Crew member</h3>'+crewSelectHtml+'</div>'+
+        '<div class="card"><h3>Items declared</h3>'+catsHtml+'</div>'+
+      '</div>'+
+      '<div class="cart-panel">'+
+        '<h3>This declaration</h3>'+
+        (selectedCrew ? '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">'+escapeHtml(selectedCrew.name)+'</div>' : '<div class="empty-note" style="color:#8E9AB3;">Select a crew member</div>')+
+        (cartLines || '<div class="empty-note" style="color:#8E9AB3;">Nothing selected</div>')+
+        '<button class="btn btn-stamp btn-block" id="saveDeclBtn" '+(canSave?'':'disabled')+'>Save declaration</button>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<h3>Declared this period</h3>'+
+      '<table class="plain"><thead><tr><th>Date</th><th>Crew</th><th>Items</th><th></th></tr></thead><tbody>'+listHtml+'</tbody></table>'+
     '</div>';
   }
 
@@ -674,6 +840,34 @@
     }).join('');
     if(!Object.keys(byCrew).length) rows = '<tr><td colspan="3" class="empty-note">No sales recorded for this month.</td></tr>';
 
+    // Itemized breakdown: for each crew, what they bought this period, quantities and line totals.
+    var byCrewItems = {};
+    txns.forEach(function(t){
+      byCrewItems[t.crewId] = byCrewItems[t.crewId] || {name:t.crewName, items:{}, total:0};
+      var entry = byCrewItems[t.crewId];
+      entry.total += t.total;
+      t.items.forEach(function(i){
+        entry.items[i.itemId] = entry.items[i.itemId] || {name:i.name, qty:0, amount:0};
+        entry.items[i.itemId].qty += i.qty;
+        entry.items[i.itemId].amount += i.price * i.qty;
+      });
+    });
+    var crewIds = Object.keys(byCrewItems).sort(function(a,b){return byCrewItems[b].total-byCrewItems[a].total;});
+    var crewStatementsHtml = crewIds.map(function(id){
+      var c = byCrewItems[id];
+      var itemRows = Object.keys(c.items).map(function(iid){
+        var it = c.items[iid];
+        return '<tr><td>'+escapeHtml(it.name)+'</td><td>'+it.qty+'</td><td class="month-total">'+fmtMoney(it.amount)+'</td></tr>';
+      }).join('');
+      return '<div class="crew-statement" data-crew-statement="'+id+'">'+
+        '<div class="crew-statement-head"><h4>'+escapeHtml(c.name)+'</h4>'+
+          '<button class="icon-btn no-print" data-print-crew="'+id+'">Print this statement</button></div>'+
+        '<table class="plain"><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>'+itemRows+'</tbody></table>'+
+        '<div class="crew-statement-total"><span>Subtotal — '+escapeHtml(c.name)+'</span><span>'+fmtMoney(c.total)+'</span></div>'+
+      '</div>';
+    }).join('');
+    if(!crewIds.length) crewStatementsHtml = '<div class="empty-note">No sales recorded for this period.</div>';
+
     var txnRows = txns.slice().reverse().map(function(t){
       var d = new Date(t.dateISO);
       return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(t.crewName)+'</td><td>'+t.items.length+'</td>'+
@@ -687,21 +881,53 @@
     for(var i=0;i<12;i++){
       var d = new Date(now.getFullYear(), now.getMonth()-i, 1);
       var mkey = monthKey(d);
-      monthOptions.push('<option value="'+mkey+'"'+(mkey===mk?' selected':'')+'>'+d.toLocaleDateString(undefined,{month:'long',year:'numeric'})+'</option>');
+      monthOptions.push('<option value="'+mkey+'"'+(mkey===mk?' selected':'')+'>'+periodLabel(mkey)+'</option>');
     }
 
+    var cutoffMonthOptions = [];
+    for(var j=-6;j<=3;j++){
+      var cd = new Date(now.getFullYear(), now.getMonth()+j, 1);
+      var cmk = monthKey(cd);
+      cutoffMonthOptions.push('<option value="'+cmk+'"'+(cmk===state.cutoffEditMonth?' selected':'')+'>'+cd.toLocaleDateString(undefined,{month:'long',year:'numeric'})+'</option>');
+    }
+    var hasOverride = state.settings.periodCutoffs && state.settings.periodCutoffs[state.cutoffEditMonth] != null;
+    var effectiveCutoff = getCutoffForMonth(state.cutoffEditMonth);
+    var defaultCutoff = state.settings.defaultCutoffDay || 1;
+
     return ''+
-    '<h2 class="page-title">Monthly report</h2>'+
-    '<p class="page-sub">Per-crew totals for payroll deduction. Pick a month, then print or hand this over to payroll.</p>'+
+    '<h2 class="page-title">Report</h2>'+
+    '<p class="page-sub">Per-crew totals for payroll deduction. Pick a period, then print or hand this over to payroll.</p>'+
+    '<div class="card">'+
+      '<h3>Cut-off day by month</h3>'+
+      '<p class="settings-note" style="margin:0 0 14px;">Pick a calendar month, set the day it closes for salary-deduction prep, and save. Each month can have its own cut-off — sales made after that day roll into next month\'s report.</p>'+
+      '<div class="add-row">'+
+        '<select id="cutoffMonthSelect">'+cutoffMonthOptions.join('')+'</select>'+
+        '<input type="number" id="cutoffDayInput" min="1" max="28" value="'+effectiveCutoff+'" style="max-width:90px;">'+
+        '<button class="btn btn-outline" id="saveCutoffBtn">Save for this month</button>'+
+        (hasOverride ? '<button class="btn btn-outline" id="clearCutoffBtn">Use default</button>' : '')+
+      '</div>'+
+      '<p class="settings-note">'+(hasOverride ? 'This month has its own cut-off (day '+effectiveCutoff+').' : 'This month is using the default cut-off (day '+defaultCutoff+').')+'</p>'+
+      '<div class="add-row" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft);">'+
+        '<label style="font-size:13px;color:var(--grey);">Default cut-off (for months without their own setting)</label>'+
+        '<input type="number" id="defaultCutoffInput" min="1" max="28" value="'+defaultCutoff+'" style="max-width:90px;">'+
+        '<button class="btn btn-outline" id="saveDefaultCutoffBtn">Save default</button>'+
+      '</div>'+
+    '</div>'+
     '<div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'+
-      '<label style="font-size:13px;color:var(--grey);">Month</label>'+
+      '<label style="font-size:13px;color:var(--grey);">Period</label>'+
       '<select id="monthSelect">'+monthOptions.join('')+'</select>'+
       '<button class="btn btn-outline" id="printReportBtn" style="margin-left:auto;">Print report</button>'+
     '</div>'+
-    '<div class="grand-total-card"><span class="label">Total to deduct, all crew</span><span class="amt">'+fmtMoney(grand)+'</span></div>'+
+    '<div class="grand-total-card"><span class="label">Total to deduct — '+periodLabel(mk)+'</span><span class="amt">'+fmtMoney(grand)+'</span></div>'+
     '<div class="card" id="reportPrintArea">'+
-      '<h3>Deduction by crew member</h3>'+
-      '<table class="plain"><thead><tr><th>Crew</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<div id="crewSummaryTable">'+
+        '<h3>Deduction by crew member</h3>'+
+        '<table class="plain"><thead><tr><th>Crew</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '</div>'+
+      '<div class="itemized-breakdown" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);">'+
+        '<h3>Itemized purchases by crew — '+periodLabel(mk)+'</h3>'+
+        crewStatementsHtml+
+      '</div>'+
     '</div>'+
     '<div class="card">'+
       '<h3>All transactions this month</h3>'+
@@ -712,11 +938,10 @@
   function bindTabEvents(){
     var main = document.getElementById('main');
 
-    main.querySelectorAll('[data-crew]').forEach(function(el){
-      el.addEventListener('click', function(){
-        state.selectedCrewId = el.dataset.crew;
-        render();
-      });
+    var crewSelect = document.getElementById('crewSelect');
+    if(crewSelect) crewSelect.addEventListener('change', function(){
+      state.selectedCrewId = crewSelect.value || null;
+      render();
     });
     main.querySelectorAll('[data-plus]').forEach(function(el){
       el.addEventListener('click', function(){
@@ -764,6 +989,36 @@
     main.querySelectorAll('[data-del-item]').forEach(function(el){
       el.addEventListener('click', function(){ removeItem(el.dataset.delItem); });
     });
+    main.querySelectorAll('[data-stock]').forEach(function(el){
+      el.addEventListener('change', function(){
+        updateOpeningStock(el.dataset.stock, el.value);
+      });
+    });
+
+    var declareCrewSelect = document.getElementById('declareCrewSelect');
+    if(declareCrewSelect) declareCrewSelect.addEventListener('change', function(){
+      state.declareCrewId = declareCrewSelect.value || null;
+      render();
+    });
+    main.querySelectorAll('[data-decl-plus]').forEach(function(el){
+      el.addEventListener('click', function(){
+        var id = el.dataset.declPlus;
+        state.declareCart[id] = (state.declareCart[id]||0)+1;
+        render();
+      });
+    });
+    main.querySelectorAll('[data-decl-minus]').forEach(function(el){
+      el.addEventListener('click', function(){
+        var id = el.dataset.declMinus;
+        state.declareCart[id] = Math.max(0,(state.declareCart[id]||0)-1);
+        render();
+      });
+    });
+    var saveDeclBtn = document.getElementById('saveDeclBtn');
+    if(saveDeclBtn) saveDeclBtn.addEventListener('click', saveDeclaration);
+    main.querySelectorAll('[data-del-decl]').forEach(function(el){
+      el.addEventListener('click', function(){ removeDeclaration(el.dataset.delDecl); });
+    });
 
     var monthSelect = document.getElementById('monthSelect');
     if(monthSelect) monthSelect.addEventListener('change', async function(){
@@ -772,7 +1027,98 @@
       render();
     });
     var printReportBtn = document.getElementById('printReportBtn');
-    if(printReportBtn) printReportBtn.addEventListener('click', function(){ window.print(); });
+    if(printReportBtn) printReportBtn.addEventListener('click', function(){ printFullReport(); });
+    main.querySelectorAll('[data-print-crew]').forEach(function(el){
+      el.addEventListener('click', function(){ printSingleCrewStatement(el.dataset.printCrew); });
+    });
+
+    var saveCutoffBtn = document.getElementById('saveCutoffBtn');
+    if(saveCutoffBtn) saveCutoffBtn.addEventListener('click', saveCutoffForMonth);
+    var clearCutoffBtn = document.getElementById('clearCutoffBtn');
+    if(clearCutoffBtn) clearCutoffBtn.addEventListener('click', clearCutoffForMonth);
+    var saveDefaultCutoffBtn = document.getElementById('saveDefaultCutoffBtn');
+    if(saveDefaultCutoffBtn) saveDefaultCutoffBtn.addEventListener('click', saveDefaultCutoff);
+    var cutoffMonthSelect = document.getElementById('cutoffMonthSelect');
+    if(cutoffMonthSelect) cutoffMonthSelect.addEventListener('change', function(){
+      state.cutoffEditMonth = cutoffMonthSelect.value;
+      render();
+    });
+  }
+
+  function printFullReport(){
+    document.body.classList.add('printing-report');
+    window.print();
+    var cleanup = function(){
+      document.body.classList.remove('printing-report');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(cleanup, 2000);
+  }
+
+  function printSingleCrewStatement(crewId){
+    var container = document.getElementById('reportPrintArea');
+    if(!container) return;
+    var summary = document.getElementById('crewSummaryTable');
+    var statements = container.querySelectorAll('[data-crew-statement]');
+    if(summary) summary.style.display = 'none';
+    statements.forEach(function(el){
+      el.style.display = (el.dataset.crewStatement === crewId) ? '' : 'none';
+    });
+    document.body.classList.add('printing-report');
+    window.print();
+    var cleanup = function(){
+      if(summary) summary.style.display = '';
+      statements.forEach(function(el){ el.style.display = ''; });
+      document.body.classList.remove('printing-report');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    setTimeout(cleanup, 2000);
+  }
+
+  async function updateOpeningStock(itemId, rawVal){
+    var val = parseInt(rawVal, 10);
+    if(isNaN(val) || val < 0) val = 0;
+    var it = state.catalog.find(function(x){return x.id===itemId;});
+    if(it){
+      it.openingStock = val;
+      await storageSet('catalog', state.catalog);
+    }
+    render();
+  }
+
+  async function saveCutoffForMonth(){
+    var input = document.getElementById('cutoffDayInput');
+    var val = parseInt(input.value, 10);
+    if(isNaN(val) || val < 1) val = 1;
+    if(val > 28) val = 28;
+    state.settings.periodCutoffs = state.settings.periodCutoffs || {};
+    state.settings.periodCutoffs[state.cutoffEditMonth] = val;
+    await storageSet('settings', state.settings);
+    state.viewMonth = periodKeyForDate(new Date());
+    await ensureMonthLoaded(state.viewMonth);
+    render();
+  }
+
+  async function clearCutoffForMonth(){
+    if(state.settings.periodCutoffs) delete state.settings.periodCutoffs[state.cutoffEditMonth];
+    await storageSet('settings', state.settings);
+    state.viewMonth = periodKeyForDate(new Date());
+    await ensureMonthLoaded(state.viewMonth);
+    render();
+  }
+
+  async function saveDefaultCutoff(){
+    var input = document.getElementById('defaultCutoffInput');
+    var val = parseInt(input.value, 10);
+    if(isNaN(val) || val < 1) val = 1;
+    if(val > 28) val = 28;
+    state.settings.defaultCutoffDay = val;
+    await storageSet('settings', state.settings);
+    state.viewMonth = periodKeyForDate(new Date());
+    await ensureMonthLoaded(state.viewMonth);
+    render();
   }
 
   async function addCrew(){
@@ -794,7 +1140,7 @@
     var name = document.getElementById('newItemName').value.trim();
     var price = parseFloat(document.getElementById('newItemPrice').value);
     if(!name || isNaN(price) || price<0) return;
-    state.catalog.push({id:uid(), category:cat, name:name, price:price});
+    state.catalog.push({id:uid(), category:cat, name:name, price:price, openingStock:0});
     await storageSet('catalog', state.catalog);
     render();
   }
@@ -836,7 +1182,7 @@
       items: items,
       total: total
     };
-    var mk = monthKey(new Date());
+    var mk = periodKeyForDate(new Date());
     state.monthTxns[mk] = state.monthTxns[mk] || [];
     state.monthTxns[mk].push(txn);
     await storageSet('txns:' + mk, state.monthTxns[mk]);
@@ -849,9 +1195,44 @@
 
   async function voidTxn(txnId){
     if(!confirm('Void this sale? This removes it from the record.')) return;
-    var mk = monthKey(new Date());
+    var mk = periodKeyForDate(new Date());
     state.monthTxns[mk] = (state.monthTxns[mk]||[]).filter(function(t){return t.id!==txnId;});
     await storageSet('txns:' + mk, state.monthTxns[mk]);
+    render();
+  }
+
+  async function saveDeclaration(){
+    var crew = state.crew.find(function(c){return c.id===state.declareCrewId;});
+    if(!crew) return;
+    var cartEntries = Object.keys(state.declareCart).filter(function(id){return state.declareCart[id]>0;});
+    if(!cartEntries.length) return;
+
+    var items = cartEntries.map(function(id){
+      var it = state.catalog.find(function(x){return x.id===id;});
+      return {itemId:id, name:it.name, qty:state.declareCart[id]};
+    });
+    var pk = periodKeyForDate(new Date());
+    var dcl = {
+      id: uid(),
+      crewId: crew.id,
+      crewName: crew.name,
+      dateISO: new Date().toISOString(),
+      items: items
+    };
+    state.declarations[pk] = state.declarations[pk] || [];
+    state.declarations[pk].push(dcl);
+    await storageSet('decl:' + pk, state.declarations[pk]);
+
+    state.declareCart = {};
+    state.declareCrewId = null;
+    render();
+  }
+
+  async function removeDeclaration(id){
+    if(!confirm('Remove this declaration? This does not affect inventory or payroll.')) return;
+    var pk = periodKeyForDate(new Date());
+    state.declarations[pk] = (state.declarations[pk]||[]).filter(function(d){return d.id!==id;});
+    await storageSet('decl:' + pk, state.declarations[pk]);
     render();
   }
 
