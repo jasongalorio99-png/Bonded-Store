@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -114,6 +114,19 @@
     opacity:0.6;
     width:16px;
   }
+  .nav-badge{
+    margin-left:auto;
+    background:var(--stamp);
+    color:#fff;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    font-weight:600;
+    line-height:1;
+    padding:3px 6px;
+    border-radius:10px;
+    display:none;
+  }
+  .nav-badge.show{display:inline-block;}
   main{
     flex:1;
     padding:32px 40px 60px;
@@ -436,6 +449,34 @@
   @media (max-width:900px){.sell-layout{grid-template-columns:1fr;}}
   .crew-select{width:100%;max-width:320px;}
   .stock-input{width:78px;}
+  .expiry-input{width:150px;}
+  .expiry-input.exp-soon{border-color:#B8842E;color:#8A5C1D;}
+  .expiry-input.exp-over{border-color:var(--stamp);color:var(--stamp-dark);}
+  table.plain tr.exp-row-soon td{background:rgba(184,132,46,0.08);}
+  table.plain tr.exp-row-over td{background:rgba(178,58,46,0.09);}
+  .exp-tag{
+    display:inline-block;
+    margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:0.4px;
+    padding:2px 6px;
+    border-radius:4px;
+  }
+  .exp-tag.exp-soon{background:#B8842E;color:#fff;}
+  .exp-tag.exp-over{background:var(--stamp);color:#fff;}
+  .expiry-alert{
+    background:#FBEFE3;
+    border:1px solid #B8842E;
+    border-radius:8px;
+    padding:14px 18px;
+    margin-bottom:20px;
+  }
+  .expiry-alert.has-expired{background:#F7E4E1;border-color:var(--stamp);}
+  .expiry-alert h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;}
+  .expiry-alert ul{margin:0;padding-left:18px;font-size:13.5px;}
+  .expiry-alert li{margin-bottom:3px;}
+  .expiry-alert .exp-days{font-family:'IBM Plex Mono',monospace;font-weight:600;}
   .settings-note{margin:8px 0 0;flex-basis:100%;color:var(--grey);font-size:12.5px;}
 </style>
 </head>
@@ -452,7 +493,7 @@
     <nav id="nav">
       <button data-tab="sell" class="active"><span class="nav-num">01</span>Sell</button>
       <button data-tab="crew"><span class="nav-num">02</span>Crew</button>
-      <button data-tab="items"><span class="nav-num">03</span>Items</button>
+      <button data-tab="items"><span class="nav-num">03</span>Items<span class="nav-badge" id="itemsNavBadge"></span></button>
       <button data-tab="declare"><span class="nav-num">04</span>Declare</button>
       <button data-tab="reports"><span class="nav-num">05</span>Reports</button>
     </nav>
@@ -2872,6 +2913,40 @@ var qrcode = function() {
   function fmtMoney(n){
     return '$' + (Math.round(n*100)/100).toFixed(2);
   }
+  var EXPIRY_WARN_DAYS = 30;
+  function daysUntil(dateStr){
+    if(!dateStr) return null;
+    var today = new Date();
+    var todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    var exp = new Date(dateStr + 'T00:00:00');
+    if(isNaN(exp.getTime())) return null;
+    return Math.round((exp - todayMid) / 86400000);
+  }
+  function expiryStatus(dateStr){
+    var d = daysUntil(dateStr);
+    if(d === null) return null;
+    if(d < 0) return 'over';
+    if(d <= EXPIRY_WARN_DAYS) return 'soon';
+    return null;
+  }
+  function getExpiringItems(){
+    return state.catalog
+      .filter(function(it){ return expiryStatus(it.expiryDate); })
+      .map(function(it){ return {item: it, days: daysUntil(it.expiryDate), status: expiryStatus(it.expiryDate)}; })
+      .sort(function(a,b){ return a.days - b.days; });
+  }
+  function updateExpiryNavBadge(){
+    var badge = document.getElementById('itemsNavBadge');
+    if(!badge) return;
+    var count = getExpiringItems().length;
+    if(count > 0){
+      badge.textContent = count;
+      badge.classList.add('show');
+    }else{
+      badge.textContent = '';
+      badge.classList.remove('show');
+    }
+  }
   // Calendar months (YYYY-MM) spanning startStr..endStr (YYYY-MM-DD), plus one trailing
   // buffer month — since a sale can be bucketed one month ahead of its real date when a
   // month's own cut-off pushes it forward, the buffer guarantees full coverage.
@@ -2941,10 +3016,10 @@ var qrcode = function() {
   }
 
   var DEFAULT_CATALOG = [
-    {id:uid(), category:'Cigarettes', name:'Pack of cigarettes', price:5.00, openingStock:0},
-    {id:uid(), category:'Soft Drinks', name:'Soft drink 330ml', price:1.00, openingStock:0},
-    {id:uid(), category:'Chocolates', name:'Chocolate bar', price:1.50, openingStock:0},
-    {id:uid(), category:'Chips', name:'Bag of chips', price:1.00, openingStock:0}
+    {id:uid(), category:'Cigarettes', name:'Pack of cigarettes', price:5.00, openingStock:0, expiryDate:''},
+    {id:uid(), category:'Soft Drinks', name:'Soft drink 330ml', price:1.00, openingStock:0, expiryDate:''},
+    {id:uid(), category:'Chocolates', name:'Chocolate bar', price:1.50, openingStock:0, expiryDate:''},
+    {id:uid(), category:'Chips', name:'Bag of chips', price:1.00, openingStock:0, expiryDate:''}
   ];
 
   async function storageGet(key, fallback, shared){
@@ -3025,6 +3100,7 @@ var qrcode = function() {
     else if(state.tab === 'declare') main.innerHTML = renderDeclare();
     else if(state.tab === 'reports') main.innerHTML = renderReports();
     bindTabEvents();
+    updateExpiryNavBadge();
   }
 
   function renderSell(){
@@ -3162,34 +3238,61 @@ var qrcode = function() {
     });
     var rows = '';
     Object.keys(byCat).sort().forEach(function(cat){
-      rows += '<tr class="cat-row"><td colspan="6">'+escapeHtml(cat)+'</td></tr>';
+      rows += '<tr class="cat-row"><td colspan="7">'+escapeHtml(cat)+'</td></tr>';
       byCat[cat].forEach(function(it){
         var opening = it.openingStock || 0;
         var soldQty = sold[it.id] || 0;
         var remaining = opening - soldQty;
         totalValue += remaining * it.price;
-        rows += '<tr><td>'+escapeHtml(it.name)+'</td>'+
+        var status = expiryStatus(it.expiryDate);
+        var days = daysUntil(it.expiryDate);
+        var rowClass = status === 'over' ? ' class="exp-row-over"' : (status === 'soon' ? ' class="exp-row-soon"' : '');
+        var expInputClass = 'expiry-input' + (status === 'over' ? ' exp-over' : (status === 'soon' ? ' exp-soon' : ''));
+        var expTag = '';
+        if(status === 'over') expTag = '<span class="exp-tag exp-over">Expired '+Math.abs(days)+'d ago</span>';
+        else if(status === 'soon') expTag = '<span class="exp-tag exp-soon">Expires in '+days+'d</span>';
+        rows += '<tr'+rowClass+'><td>'+escapeHtml(it.name)+'</td>'+
           '<td class="month-total">'+fmtMoney(it.price)+'</td>'+
           '<td><input type="number" class="stock-input" min="0" step="1" value="'+opening+'" data-stock="'+it.id+'"></td>'+
           '<td class="month-total">'+soldQty+'</td>'+
           '<td class="month-total">'+remaining+'</td>'+
+          '<td><input type="date" class="'+expInputClass+'" value="'+(it.expiryDate || '')+'" data-expiry="'+it.id+'">'+expTag+'</td>'+
           '<td class="row-actions"><button class="icon-btn" data-del-item="'+it.id+'">Remove</button></td></tr>';
       });
     });
-    if(!state.catalog.length) rows = '<tr><td colspan="6" class="empty-note">No items yet.</td></tr>';
+    if(!state.catalog.length) rows = '<tr><td colspan="7" class="empty-note">No items yet.</td></tr>';
     var lastReset = state.settings.stockCycleStart
       ? ('Last reset: ' + new Date(state.settings.stockCycleStart).toLocaleString())
       : 'Never reset yet — Sold is currently counting from the very first sale.';
+
+    var expiring = getExpiringItems();
+    var expiryAlertHtml = '';
+    if(expiring.length){
+      var hasExpired = expiring.some(function(e){ return e.status === 'over'; });
+      var lines = expiring.map(function(e){
+        var label = e.status === 'over'
+          ? '<span class="exp-days">Expired '+Math.abs(e.days)+' day'+(Math.abs(e.days)===1?'':'s')+' ago</span>'
+          : '<span class="exp-days">'+e.days+' day'+(e.days===1?'':'s')+' left</span>';
+        return '<li>'+escapeHtml(e.item.name)+' &mdash; '+label+' (exp. '+e.item.expiryDate+')</li>';
+      }).join('');
+      expiryAlertHtml = '<div class="expiry-alert'+(hasExpired?' has-expired':'')+'">'+
+        '<h3>'+(hasExpired ? 'Expired / expiring soon' : 'Expiring within 30 days')+'</h3>'+
+        '<ul>'+lines+'</ul>'+
+      '</div>';
+    }
+
     return ''+
     '<h2 class="page-title">Inventory</h2>'+
-    '<p class="page-sub">Set the opening stock for the start of the period. Sold and remaining update automatically as sales come in from the Sell tab.</p>'+
+    '<p class="page-sub">Set the opening stock for the start of the period. Sold and remaining update automatically as sales come in from the Sell tab. Set an expiration date per item to get an alert once it\'s within 30 days of expiring.</p>'+
+    expiryAlertHtml+
     '<div class="card">'+
       '<h3>Stock</h3>'+
-      '<div class="table-wrap"><table class="plain"><thead><tr><th>Item</th><th>Price</th><th>Opening stock</th><th>Sold</th><th>Remaining</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<div class="table-wrap"><table class="plain"><thead><tr><th>Item</th><th>Price</th><th>Opening stock</th><th>Sold</th><th>Remaining</th><th>Expiration date</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
       '<div class="add-row">'+
         '<input type="text" id="newItemCat" placeholder="Category (e.g. Cigarettes)" style="max-width:170px;">'+
         '<input type="text" id="newItemName" placeholder="Item name">'+
         '<input type="number" id="newItemPrice" placeholder="Price" min="0" step="0.01" style="max-width:100px;">'+
+        '<input type="date" id="newItemExpiry" title="Expiration date (optional)" style="max-width:150px;">'+
         '<button class="btn btn-teal" id="addItemBtn">Add item</button>'+
       '</div>'+
     '</div>'+
@@ -3470,6 +3573,11 @@ var qrcode = function() {
         updateOpeningStock(el.dataset.stock, el.value);
       });
     });
+    main.querySelectorAll('[data-expiry]').forEach(function(el){
+      el.addEventListener('change', function(){
+        updateExpiryDate(el.dataset.expiry, el.value);
+      });
+    });
     var resetStockBtn = document.getElementById('resetStockBtn');
     if(resetStockBtn) resetStockBtn.addEventListener('click', resetStockCount);
 
@@ -3651,6 +3759,15 @@ var qrcode = function() {
     render();
   }
 
+  async function updateExpiryDate(itemId, rawVal){
+    var it = state.catalog.find(function(x){return x.id===itemId;});
+    if(it){
+      it.expiryDate = rawVal || '';
+      await storageSet('catalog', state.catalog);
+    }
+    render();
+  }
+
   async function resetStockCount(){
     if(!confirm('Reset stock count? This moves each item\'s current remaining stock into Opening stock, and Sold will start counting from zero again. This cannot be undone.')) return;
     var sold = soldSinceCycleStart();
@@ -3716,8 +3833,10 @@ var qrcode = function() {
     var cat = document.getElementById('newItemCat').value.trim() || 'Other';
     var name = document.getElementById('newItemName').value.trim();
     var price = parseFloat(document.getElementById('newItemPrice').value);
+    var expiryEl = document.getElementById('newItemExpiry');
+    var expiryDate = expiryEl ? expiryEl.value : '';
     if(!name || isNaN(price) || price<0) return;
-    state.catalog.push({id:uid(), category:cat, name:name, price:price, openingStock:0});
+    state.catalog.push({id:uid(), category:cat, name:name, price:price, openingStock:0, expiryDate:expiryDate});
     await storageSet('catalog', state.catalog);
     render();
   }
