@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -450,10 +450,10 @@
   .crew-select{width:100%;max-width:320px;}
   .stock-input{width:78px;}
   .expiry-input{width:150px;}
-  .expiry-input.exp-soon{border-color:#B8842E;color:#8A5C1D;}
-  .expiry-input.exp-over{border-color:var(--stamp);color:var(--stamp-dark);}
-  table.plain tr.exp-row-soon td{background:rgba(184,132,46,0.08);}
-  table.plain tr.exp-row-over td{background:rgba(178,58,46,0.09);}
+  .expiry-input.exp-soon{border-color:var(--stamp);color:var(--stamp-dark);}
+  .expiry-input.exp-over{border-color:var(--stamp-dark);color:var(--stamp-dark);}
+  table.plain tr.exp-row-soon td{background:rgba(178,58,46,0.09);}
+  table.plain tr.exp-row-over td{background:rgba(138,44,34,0.14);}
   .exp-tag{
     display:inline-block;
     margin-top:4px;
@@ -463,16 +463,16 @@
     padding:2px 6px;
     border-radius:4px;
   }
-  .exp-tag.exp-soon{background:#B8842E;color:#fff;}
-  .exp-tag.exp-over{background:var(--stamp);color:#fff;}
+  .exp-tag.exp-soon{background:var(--stamp);color:#fff;}
+  .exp-tag.exp-over{background:var(--stamp-dark);color:#fff;}
   .expiry-alert{
-    background:#FBEFE3;
-    border:1px solid #B8842E;
+    background:#F7E4E1;
+    border:1px solid var(--stamp);
     border-radius:8px;
     padding:14px 18px;
     margin-bottom:20px;
   }
-  .expiry-alert.has-expired{background:#F7E4E1;border-color:var(--stamp);}
+  .expiry-alert.has-expired{background:#F2D4D0;border-color:var(--stamp-dark);}
   .expiry-alert h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.6px;}
   .expiry-alert ul{margin:0;padding-left:18px;font-size:13.5px;}
   .expiry-alert li{margin-bottom:3px;}
