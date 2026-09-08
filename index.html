@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -285,6 +285,7 @@
   .cart-total .amt{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;color:#fff;}
   .btn{
     all:unset;
+    box-sizing:border-box;
     cursor:pointer;
     display:inline-block;
     padding:12px 18px;
@@ -452,6 +453,8 @@
   .expiry-input{width:150px;}
   .expiry-input.exp-soon{border-color:var(--stamp);color:var(--stamp-dark);}
   .expiry-input.exp-over{border-color:var(--stamp-dark);color:var(--stamp-dark);}
+  table.plain tr.stock-row-out td{background:rgba(35,52,80,0.07);}
+  table.plain tr.stock-row-out .stock-input{border-color:var(--ink-2);}
   table.plain tr.exp-row-soon td{background:rgba(178,58,46,0.09);}
   table.plain tr.exp-row-over td{background:rgba(138,44,34,0.14);}
   .exp-tag{
@@ -465,6 +468,7 @@
   }
   .exp-tag.exp-soon{background:var(--stamp);color:#fff;}
   .exp-tag.exp-over{background:var(--stamp-dark);color:#fff;}
+  .exp-tag.stock-out-tag{background:var(--ink-2);color:#fff;margin-top:0;margin-left:6px;}
   .expiry-alert{
     background:#F7E4E1;
     border:1px solid var(--stamp);
@@ -3246,16 +3250,22 @@ var qrcode = function() {
         totalValue += remaining * it.price;
         var status = expiryStatus(it.expiryDate);
         var days = daysUntil(it.expiryDate);
-        var rowClass = status === 'over' ? ' class="exp-row-over"' : (status === 'soon' ? ' class="exp-row-soon"' : '');
+        var isOut = remaining <= 0;
+        var rowClasses = [];
+        if(isOut) rowClasses.push('stock-row-out');
+        if(status === 'over') rowClasses.push('exp-row-over');
+        else if(status === 'soon') rowClasses.push('exp-row-soon');
+        var rowClass = rowClasses.length ? ' class="'+rowClasses.join(' ')+'"' : '';
         var expInputClass = 'expiry-input' + (status === 'over' ? ' exp-over' : (status === 'soon' ? ' exp-soon' : ''));
         var expTag = '';
         if(status === 'over') expTag = '<span class="exp-tag exp-over">Expired '+Math.abs(days)+'d ago</span>';
         else if(status === 'soon') expTag = '<span class="exp-tag exp-soon">Expires in '+days+'d</span>';
+        var stockTag = isOut ? '<span class="exp-tag stock-out-tag">Out of stock</span>' : '';
         rows += '<tr'+rowClass+'><td>'+escapeHtml(it.name)+'</td>'+
           '<td class="month-total">'+fmtMoney(it.price)+'</td>'+
           '<td><input type="number" class="stock-input" min="0" step="1" value="'+opening+'" data-stock="'+it.id+'"></td>'+
           '<td class="month-total">'+soldQty+'</td>'+
-          '<td class="month-total">'+remaining+'</td>'+
+          '<td class="month-total">'+remaining+stockTag+'</td>'+
           '<td><input type="date" class="'+expInputClass+'" value="'+(it.expiryDate || '')+'" data-expiry="'+it.id+'">'+expTag+'</td>'+
           '<td class="row-actions"><button class="icon-btn" data-del-item="'+it.id+'">Remove</button></td></tr>';
       });
