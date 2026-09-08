@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -72,7 +72,11 @@
     padding:5px 9px;
     transform:rotate(-3deg);
     border-radius:3px;
+    background:transparent;
+    cursor:pointer;
   }
+  .brand .stamp-mark:hover{background:rgba(217,207,174,0.12);}
+  .brand .stamp-mark:active{transform:rotate(-3deg) scale(0.96);}
   .brand .brand-officer{
     display:block;
     font-family:'IBM Plex Mono',monospace;
@@ -489,7 +493,7 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <span class="stamp-mark">BONDED</span>
+      <button type="button" class="stamp-mark" id="brandHomeBtn">BONDED</button>
       <span class="brand-officer">3/O Jason Galorio</span>
       <h1>Crew Store Ledger</h1>
       <p>tally &middot; receipt &middot; deduct</p>
@@ -499,7 +503,8 @@
       <button data-tab="crew"><span class="nav-num">02</span>Crew</button>
       <button data-tab="items"><span class="nav-num">03</span>Items<span class="nav-badge" id="itemsNavBadge"></span></button>
       <button data-tab="declare"><span class="nav-num">04</span>Declare</button>
-      <button data-tab="reports"><span class="nav-num">05</span>Reports</button>
+      <button data-tab="vouchers"><span class="nav-num">05</span>Internet Vouchers</button>
+      <button data-tab="reports"><span class="nav-num">06</span>Reports</button>
     </nav>
   </aside>
 
@@ -2865,6 +2870,7 @@ var qrcode = function() {
     crew: [],
     monthTxns: {},
     declarations: {},
+    vouchers: [],
     cart: {},
     declareCart: {},
     selectedCrewId: null,
@@ -3050,6 +3056,7 @@ var qrcode = function() {
       await storageSet('catalog', state.catalog);
     }
     state.crew = await storageGet('crew', []);
+    state.vouchers = await storageGet('vouchers', []);
     var rawSettings = await storageGet('settings', null);
     if(!rawSettings){
       state.settings = {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null};
@@ -3096,12 +3103,16 @@ var qrcode = function() {
     if(btn) switchTab(btn.dataset.tab);
   });
 
+  var brandHomeBtn = document.getElementById('brandHomeBtn');
+  if(brandHomeBtn) brandHomeBtn.addEventListener('click', function(){ switchTab('sell'); });
+
   function render(){
     var main = document.getElementById('main');
     if(state.tab === 'sell') main.innerHTML = renderSell();
     else if(state.tab === 'crew') main.innerHTML = renderCrew();
     else if(state.tab === 'items') main.innerHTML = renderItems();
     else if(state.tab === 'declare') main.innerHTML = renderDeclare();
+    else if(state.tab === 'vouchers') main.innerHTML = renderVouchers();
     else if(state.tab === 'reports') main.innerHTML = renderReports();
     bindTabEvents();
     updateExpiryNavBadge();
@@ -3387,6 +3398,40 @@ var qrcode = function() {
     '</div>';
   }
 
+  function renderVouchers(){
+    var lastByCrewId = {};
+    state.vouchers.forEach(function(v){
+      if(!lastByCrewId[v.crewId] || v.dateISO > lastByCrewId[v.crewId]) lastByCrewId[v.crewId] = v.dateISO;
+    });
+    var crewRows = state.crew.map(function(c){
+      var last = lastByCrewId[c.id];
+      var lastLabel = last ? new Date(last).toLocaleDateString() : '—';
+      return '<tr><td>'+escapeHtml(c.name)+'</td>'+
+        '<td class="month-total">'+lastLabel+'</td>'+
+        '<td class="row-actions"><button class="btn btn-teal" data-give-voucher="'+c.id+'">Give voucher</button></td></tr>';
+    }).join('');
+    if(!state.crew.length) crewRows = '<tr><td colspan="3" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
+
+    var log = state.vouchers.slice().sort(function(a,b){ return new Date(b.dateISO) - new Date(a.dateISO); });
+    var logHtml = log.length ? log.map(function(v){
+      var d = new Date(v.dateISO);
+      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(v.crewName)+'</td>'+
+        '<td class="row-actions"><button class="icon-btn" data-del-voucher="'+v.id+'">Remove</button></td></tr>';
+    }).join('') : '<tr><td colspan="3" class="empty-note">No vouchers logged yet.</td></tr>';
+
+    return ''+
+    '<h2 class="page-title">Internet vouchers</h2>'+
+    '<p class="page-sub">Track internet vouchers handed out to crew. Tap "Give voucher" to log one for today — this is a manual record and does not affect stock or charges.</p>'+
+    '<div class="card">'+
+      '<h3>Crew</h3>'+
+      '<div class="table-wrap"><table class="plain"><thead><tr><th>Name</th><th>Last voucher</th><th></th></tr></thead><tbody>'+crewRows+'</tbody></table></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<h3>Voucher log</h3>'+
+      '<div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Crew</th><th></th></tr></thead><tbody>'+logHtml+'</tbody></table></div>'+
+    '</div>';
+  }
+
   function renderReports(){
     var mk = state.viewMonth;
     var rangeInvalid = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && state.customRange.start > state.customRange.end);
@@ -3614,6 +3659,13 @@ var qrcode = function() {
     if(saveDeclBtn) saveDeclBtn.addEventListener('click', saveDeclaration);
     main.querySelectorAll('[data-del-decl]').forEach(function(el){
       el.addEventListener('click', function(){ removeDeclaration(el.dataset.delDecl); });
+    });
+
+    main.querySelectorAll('[data-give-voucher]').forEach(function(el){
+      el.addEventListener('click', function(){ giveVoucher(el.dataset.giveVoucher); });
+    });
+    main.querySelectorAll('[data-del-voucher]').forEach(function(el){
+      el.addEventListener('click', function(){ removeVoucher(el.dataset.delVoucher); });
     });
 
     var monthSelect = document.getElementById('monthSelect');
@@ -3939,6 +3991,26 @@ var qrcode = function() {
     var pk = periodKeyForDate(new Date());
     state.declarations[pk] = (state.declarations[pk]||[]).filter(function(d){return d.id!==id;});
     await storageSet('decl:' + pk, state.declarations[pk]);
+    render();
+  }
+
+  async function giveVoucher(crewId){
+    var crew = state.crew.find(function(c){return c.id===crewId;});
+    if(!crew) return;
+    state.vouchers.push({
+      id: uid(),
+      crewId: crew.id,
+      crewName: crew.name,
+      dateISO: new Date().toISOString()
+    });
+    await storageSet('vouchers', state.vouchers);
+    render();
+  }
+
+  async function removeVoucher(id){
+    if(!confirm('Remove this voucher record?')) return;
+    state.vouchers = state.vouchers.filter(function(v){return v.id!==id;});
+    await storageSet('vouchers', state.vouchers);
     render();
   }
 
