@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -168,6 +168,31 @@
     letter-spacing:2px;
     margin:4px 0 26px;
     color:var(--ink);
+  }
+  .subnav{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:22px;
+  }
+  .subnav button{
+    all:unset;
+    box-sizing:border-box;
+    cursor:pointer;
+    padding:8px 16px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    background:var(--paper-2);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    color:var(--ink-2);
+  }
+  .subnav button:hover{border-color:var(--teal);}
+  .subnav button.active{
+    background:var(--stamp);
+    border-color:var(--stamp-dark);
+    color:#fff;
+    font-weight:600;
   }
   .home-quick{
     all:unset;
@@ -561,18 +586,7 @@
     <div class="brand">
       <button type="button" class="stamp-mark" id="brandHomeBtn">BONDED</button>
       <span class="brand-officer">3/O Jason Galorio</span>
-      <h1>Crew Store Ledger</h1>
-      <p>tally &middot; receipt &middot; deduct</p>
     </div>
-    <nav id="nav">
-      <button data-tab="home" class="active"><span class="nav-num">00</span>Home</button>
-      <button data-tab="sell"><span class="nav-num">01</span>Slopchest</button>
-      <button data-tab="crew"><span class="nav-num">02</span>Crew</button>
-      <button data-tab="items"><span class="nav-num">03</span>Items<span class="nav-badge" id="itemsNavBadge"></span></button>
-      <button data-tab="declare"><span class="nav-num">04</span>Declare</button>
-      <button data-tab="vouchers"><span class="nav-num">05</span>Internet Vouchers</button>
-      <button data-tab="reports"><span class="nav-num">06</span>Reports</button>
-    </nav>
   </aside>
 
   <main id="main"></main>
@@ -3159,16 +3173,8 @@ var qrcode = function() {
 
   function switchTab(tab){
     state.tab = tab;
-    document.querySelectorAll('#nav button').forEach(function(b){
-      b.classList.toggle('active', b.dataset.tab === tab);
-    });
     render();
   }
-
-  document.getElementById('nav').addEventListener('click', function(e){
-    var btn = e.target.closest('button[data-tab]');
-    if(btn) switchTab(btn.dataset.tab);
-  });
 
   var brandHomeBtn = document.getElementById('brandHomeBtn');
   if(brandHomeBtn) brandHomeBtn.addEventListener('click', function(){ switchTab('home'); });
@@ -3192,6 +3198,18 @@ var qrcode = function() {
   var ICON_BOX = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8 12 3.5 20.5 8 12 12.5 3.5 8Z"/><path d="M3.5 8v9L12 21.5 20.5 17V8"/><path d="M12 12.5V21.5"/></svg>';
   var ICON_CLIPBOARD = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="17" rx="2"/><path d="M9 4.5V3.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="m8.5 13 2.2 2.2L15.5 11"/></svg>';
   var ICON_CHART = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M11 20V4"/><path d="M18 20v-7"/><path d="M2.5 20.5h19"/></svg>';
+
+  function slopchestSubNav(active){
+    var tabs = [
+      {id:'sell', label:'Sell'},
+      {id:'items', label:'Items'},
+      {id:'declare', label:'Declare'},
+      {id:'reports', label:'Reports'}
+    ];
+    return '<div class="subnav">'+tabs.map(function(t){
+      return '<button data-tab="'+t.id+'"'+(active===t.id?' class="active"':'')+'>'+t.label+'</button>';
+    }).join('')+'</div>';
+  }
 
   function renderHome(){
     var expiringCount = getExpiringItems().length;
@@ -3276,6 +3294,7 @@ var qrcode = function() {
     }).join('') : '<tr><td colspan="4" class="empty-note">No sales recorded yet today.</td></tr>';
 
     return ''+
+    slopchestSubNav('sell')+
     '<h2 class="page-title">Slopchest</h2>'+
     '<p class="page-sub">'+todayStr()+' — pick the crew member, tap what they take, then complete the sale.</p>'+
     '<div class="sell-layout">'+
@@ -3393,6 +3412,7 @@ var qrcode = function() {
     }
 
     return ''+
+    slopchestSubNav('items')+
     '<h2 class="page-title">Inventory</h2>'+
     '<p class="page-sub">Set the opening stock for the start of the period. Sold and remaining update automatically as sales come in from the Sell tab. Set an expiration date per item to get an alert once it\'s within 30 days of expiring.</p>'+
     expiryAlertHtml+
@@ -3468,6 +3488,7 @@ var qrcode = function() {
     }).join('') : '<tr><td colspan="4" class="empty-note">No declarations recorded this period.</td></tr>';
 
     return ''+
+    slopchestSubNav('declare')+
     '<h2 class="page-title">Crew declaration</h2>'+
     '<p class="page-sub">Log cigarette items handed out to crew as a declared allowance. Only cigarette items appear here. These are kept on record but are not charged to the crew member and do not reduce inventory stock.</p>'+
     '<div class="sell-layout">'+
@@ -3597,6 +3618,7 @@ var qrcode = function() {
     var defaultCutoff = state.settings.defaultCutoffDay || 1;
 
     return ''+
+    slopchestSubNav('reports')+
     '<h2 class="page-title">Report</h2>'+
     '<p class="page-sub">Per-crew totals for payroll deduction. Pick a period, then print or hand this over to payroll.</p>'+
     '<div class="card">'+
