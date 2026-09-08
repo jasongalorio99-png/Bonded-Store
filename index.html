@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -162,11 +162,19 @@
     color:var(--grey);
     font-weight:600;
   }
+  .home-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:26px;
+  }
   .home-title{
     font-family:'Special Elite',monospace;
     font-size:30px;
     letter-spacing:2px;
-    margin:4px 0 26px;
+    margin:0;
     color:var(--ink);
   }
   .subnav{
@@ -194,26 +202,21 @@
     color:#fff;
     font-weight:600;
   }
-  .home-quick{
+  .home-header-btn{
     all:unset;
     box-sizing:border-box;
     display:flex;
-    flex-direction:column;
     align-items:center;
-    justify-content:center;
     gap:8px;
-    width:100%;
-    background:var(--paper-2);
-    border:1px solid var(--line);
-    border-radius:10px;
-    padding:22px 16px;
-    margin-bottom:26px;
     cursor:pointer;
-    text-align:center;
+    padding:9px 16px;
+    border:1px solid var(--line);
+    border-radius:20px;
+    background:var(--paper-2);
   }
-  .home-quick:hover{border-color:var(--teal);}
-  .home-quick svg{width:30px;height:30px;}
-  .home-quick-label{font-family:'Special Elite',monospace;font-size:15px;color:var(--ink);}
+  .home-header-btn:hover{border-color:var(--teal);}
+  .home-header-btn svg{width:20px;height:20px;}
+  .home-header-btn span{font-family:'Special Elite',monospace;font-size:13px;color:var(--ink);}
   .home-grid{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -3195,9 +3198,6 @@ var qrcode = function() {
   var ICON_CREW = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="8" r="3"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M2.5 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M15 15.2c2.6.2 4.5 2.1 4.5 4.8"/></svg>';
   var ICON_BAG = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l1 12.5H5L6 8Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>';
   var ICON_TICKET = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.2a1.6 1.6 0 0 0 0 3.1V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.7a1.6 1.6 0 0 0 0-3.1V9Z"/><path d="M14 7.5v9"/></svg>';
-  var ICON_BOX = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8 12 3.5 20.5 8 12 12.5 3.5 8Z"/><path d="M3.5 8v9L12 21.5 20.5 17V8"/><path d="M12 12.5V21.5"/></svg>';
-  var ICON_CLIPBOARD = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="17" rx="2"/><path d="M9 4.5V3.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="m8.5 13 2.2 2.2L15.5 11"/></svg>';
-  var ICON_CHART = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M11 20V4"/><path d="M18 20v-7"/><path d="M2.5 20.5h19"/></svg>';
 
   function slopchestSubNav(active){
     var tabs = [
@@ -3215,14 +3215,13 @@ var qrcode = function() {
     var expiringCount = getExpiringItems().length;
     var itemsBadge = expiringCount ? '<span class="home-tile-badge">'+expiringCount+'</span>' : '';
     return ''+
-    '<h2 class="home-title">HOME</h2>'+
-    '<button class="home-quick" data-tab="crew">'+ICON_CREW+'<span class="home-quick-label">Crew list</span></button>'+
+    '<div class="home-header">'+
+      '<h2 class="home-title">HOME</h2>'+
+      '<button class="home-header-btn" data-tab="crew">'+ICON_CREW+'<span>Crew list</span></button>'+
+    '</div>'+
     '<div class="home-grid">'+
-      '<button class="home-tile" data-tab="sell">'+ICON_BAG+'<span class="home-tile-label">Slopchest</span></button>'+
+      '<button class="home-tile" data-tab="sell">'+itemsBadge+ICON_BAG+'<span class="home-tile-label">Slopchest</span></button>'+
       '<button class="home-tile" data-tab="vouchers">'+ICON_TICKET+'<span class="home-tile-label">Internet Vouchers</span></button>'+
-      '<button class="home-tile" data-tab="items">'+itemsBadge+ICON_BOX+'<span class="home-tile-label">Items</span></button>'+
-      '<button class="home-tile" data-tab="declare">'+ICON_CLIPBOARD+'<span class="home-tile-label">Declare</span></button>'+
-      '<button class="home-tile" data-tab="reports">'+ICON_CHART+'<span class="home-tile-label">Reports</span></button>'+
     '</div>';
   }
 
