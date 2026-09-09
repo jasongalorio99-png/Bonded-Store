@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -581,6 +581,22 @@
   .expiry-alert .exp-days{font-family:'IBM Plex Mono',monospace;font-weight:600;}
   .settings-note{margin:8px 0 0;flex-basis:100%;color:var(--grey);font-size:12.5px;}
 </style>
+
+<style id="voucher-summary-style">
+.voucher-summary{margin-top:14px;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#fff}
+.voucher-summary .summary-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-bottom:1px solid #eee}
+.voucher-summary .summary-row:last-child{border-bottom:0}
+.voucher-summary .summary-row strong{min-width:70px;text-align:right}
+.voucher-summary input{width:90px;padding:6px 8px;text-align:right}
+</style>
+
+
+<style id="voucher-reset-style">
+.voucher-reset-wrap{margin-top:10px;text-align:right}
+.voucher-reset-btn{padding:8px 14px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
+.voucher-reset-btn:hover{opacity:.85}
+</style>
+
 </head>
 <body>
 
@@ -602,6 +618,26 @@
       <button class="btn btn-outline" id="closeReceiptBtn">Close</button>
       <button class="btn btn-teal" id="printReceiptBtn">Print copy</button>
     </div>
+  </div>
+</div>
+
+
+<div class="voucher-summary" id="voucherSummary">
+  <div class="summary-row">
+    <span>Total vouchers given to all crew — Current Month</span>
+    <strong id="currentMonthGiven">0</strong>
+  </div>
+  <div class="summary-row">
+    <span>ROB vouchers — Last Month</span>
+    <strong id="robLastMonth">0</strong>
+  </div>
+  <div class="summary-row">
+    <span>Vouchers received from office — Current Month</span>
+    <input id="officeVouchersReceived" type="number" min="0" step="1" value="0" inputmode="numeric">
+  </div>
+  <div class="summary-row">
+    <span>ROB vouchers — Current Month</span>
+    <strong id="robCurrentMonth">0</strong>
   </div>
 </div>
 
@@ -3510,17 +3546,21 @@ var qrcode = function() {
 
   function renderVouchers(){
     var lastByCrewId = {};
+    var totalByCrewId = {};
     state.vouchers.forEach(function(v){
+      totalByCrewId[v.crewId] = (totalByCrewId[v.crewId] || 0) + 1;
       if(!lastByCrewId[v.crewId] || v.dateISO > lastByCrewId[v.crewId]) lastByCrewId[v.crewId] = v.dateISO;
     });
     var crewRows = state.crew.map(function(c){
       var last = lastByCrewId[c.id];
       var lastLabel = last ? new Date(last).toLocaleDateString() : '—';
+      var totalVouchers = totalByCrewId[c.id] || 0;
       return '<tr><td>'+escapeHtml(c.name)+'</td>'+
         '<td class="month-total">'+lastLabel+'</td>'+
+        '<td class="month-total">'+totalVouchers+'</td>'+
         '<td class="row-actions"><button class="btn btn-teal" data-give-voucher="'+c.id+'">Give voucher</button></td></tr>';
     }).join('');
-    if(!state.crew.length) crewRows = '<tr><td colspan="3" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
+    if(!state.crew.length) crewRows = '<tr><td colspan="4" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
 
     var log = state.vouchers.slice().sort(function(a,b){ return new Date(b.dateISO) - new Date(a.dateISO); });
     var logHtml = log.length ? log.map(function(v){
@@ -3534,7 +3574,7 @@ var qrcode = function() {
     '<p class="page-sub">Track internet vouchers handed out to crew. Tap "Give voucher" to log one for today — this is a manual record and does not affect stock or charges.</p>'+
     '<div class="card">'+
       '<h3>Crew</h3>'+
-      '<div class="table-wrap"><table class="plain"><thead><tr><th>Name</th><th>Last voucher</th><th></th></tr></thead><tbody>'+crewRows+'</tbody></table></div>'+
+      '<div class="table-wrap"><table class="plain"><thead><tr><th>Name</th><th>Last voucher</th><th>Total given</th><th></th></tr></thead><tbody>'+crewRows+'</tbody></table></div>'+
     '</div>'+
     '<div class="card">'+
       '<h3>Voucher log</h3>'+
@@ -4196,6 +4236,121 @@ var qrcode = function() {
   }
 
   loadAll();
+})();
+</script>
+
+
+
+<div class="voucher-reset-wrap">
+  <button type="button" id="resetVoucherMonth" class="voucher-reset-btn">
+    Reset for Next Month
+  </button>
+</div>
+<script id="voucher-summary-script">
+(function(){
+  const OFFICE_KEY = 'internetVouchersOfficeReceivedCurrentMonth';
+
+  function monthKey(d){
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+  function parseVoucherDate(v){
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function getVoucherRecords(){
+    try {
+      const raw = localStorage.getItem('vouchers');
+      const data = raw ? JSON.parse(raw) : [];
+      return Array.isArray(data) ? data : [];
+    } catch(e){ return []; }
+  }
+  function countForMonth(records, year, month){
+    return records.reduce((n,r)=>{
+      const d = parseVoucherDate(r.date || r.timestamp || r.createdAt || r.givenAt);
+      return d && d.getFullYear()===year && d.getMonth()===month ? n+1 : n;
+    },0);
+  }
+  function refreshVoucherSummary(){
+    const now = new Date();
+    const records = getVoucherRecords();
+    const current = countForMonth(records, now.getFullYear(), now.getMonth());
+    const previousDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const last = countForMonth(records, previousDate.getFullYear(), previousDate.getMonth());
+
+    const office = Math.max(0, parseInt(localStorage.getItem(OFFICE_KEY) || '0', 10) || 0);
+    const robCurrent = office - current;
+
+    const a = document.getElementById('currentMonthGiven');
+    const b = document.getElementById('robLastMonth');
+    const c = document.getElementById('officeVouchersReceived');
+    const d = document.getElementById('robCurrentMonth');
+
+    if(a) a.textContent = current;
+    if(b) b.textContent = last;
+    if(c && document.activeElement !== c) c.value = office;
+    if(d) d.textContent = robCurrent;
+  }
+
+  function bindVoucherSummary(){
+    const input = document.getElementById('officeVouchersReceived');
+    if(input && !input.dataset.bound){
+      input.dataset.bound = '1';
+      input.addEventListener('input', function(){
+        const value = Math.max(0, parseInt(this.value || '0', 10) || 0);
+        localStorage.setItem(OFFICE_KEY, String(value));
+        refreshVoucherSummary();
+      });
+    }
+    refreshVoucherSummary();
+  }
+
+  // Expose refresh so the existing Give Voucher handler can trigger it.
+  window.refreshVoucherSummary = refreshVoucherSummary;
+  window.bindVoucherSummary = bindVoucherSummary;
+
+  document.addEventListener('DOMContentLoaded', bindVoucherSummary);
+
+  // Refresh after any click, covering the existing Give Voucher button
+  // without modifying its original handler.
+  document.addEventListener('click', function(){
+    setTimeout(refreshVoucherSummary, 50);
+  });
+})();
+</script>
+
+
+<script id="voucher-reset-script">
+(function(){
+  const RESET_KEY = 'internetVouchersLastResetMonth';
+  const OFFICE_KEY = 'internetVouchersOfficeReceivedCurrentMonth';
+
+  function currentMonthKey(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+  }
+
+  function resetVoucherMonth(){
+    if(!confirm('Reset Internet Vouchers for the next month? This will clear the current month office-received quantity and start a new monthly balance. Voucher history will be kept.')) return;
+
+    localStorage.setItem(RESET_KEY, currentMonthKey());
+    localStorage.setItem(OFFICE_KEY, '0');
+
+    const input = document.getElementById('officeVouchersReceived');
+    if(input) input.value = '0';
+
+    if(typeof window.refreshVoucherSummary === 'function'){
+      window.refreshVoucherSummary();
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn = document.getElementById('resetVoucherMonth');
+    if(btn && !btn.dataset.bound){
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', resetVoucherMonth);
+    }
+  });
 })();
 </script>
 
