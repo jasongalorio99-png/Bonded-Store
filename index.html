@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -440,6 +440,98 @@
   }
   .icon-btn:hover{color:var(--stamp);border-color:var(--stamp);}
   .add-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+  .sheet-card{
+    background:#fff;
+    border:1px solid var(--ink);
+    border-radius:4px;
+    overflow:hidden;
+    margin-bottom:24px;
+  }
+  .sheet-title{
+    background:var(--paper-2);
+    border-bottom:1px solid var(--ink);
+    text-align:center;
+    padding:14px;
+    font-family:'Special Elite',monospace;
+    font-size:19px;
+    letter-spacing:1px;
+    color:var(--ink);
+  }
+  .sheet-meta{
+    display:grid;
+    grid-template-columns:100px 1fr 90px 1fr;
+    border-bottom:1px solid var(--ink);
+  }
+  .sheet-meta > div{
+    padding:9px 12px;
+    border-right:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    display:flex;
+    align-items:center;
+  }
+  .sheet-meta .lbl{background:var(--paper-2);font-weight:700;color:var(--ink-2);}
+  .sheet-meta input{
+    all:unset;
+    width:100%;
+    font-family:'Special Elite',monospace;
+    font-style:italic;
+    font-size:14px;
+    color:var(--ink);
+  }
+  @media (max-width:560px){
+    .sheet-meta{grid-template-columns:90px 1fr;}
+  }
+  .sheet-table-wrap{overflow-x:auto;}
+  table.sheet-table{width:100%;border-collapse:collapse;}
+  table.sheet-table th, table.sheet-table td{
+    border:1px solid var(--line);
+    padding:8px 10px;
+    font-size:12.5px;
+    text-align:left;
+    white-space:nowrap;
+  }
+  table.sheet-table thead th{
+    background:var(--paper-2);
+    text-align:center;
+    font-weight:700;
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  table.sheet-table td.center{text-align:center;}
+  table.sheet-table tr.total-row td{font-weight:700;background:var(--paper-2);}
+  .give-voucher-btn{
+    all:unset;
+    box-sizing:border-box;
+    cursor:pointer;
+    padding:4px 12px;
+    border-radius:14px;
+    background:var(--teal);
+    color:#fff;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    white-space:nowrap;
+  }
+  .give-voucher-btn:hover{background:var(--teal-dark);}
+  table.sheet-balance{width:100%;border-collapse:collapse;}
+  table.sheet-balance td{
+    border:1px solid var(--line);
+    padding:8px 10px;
+    font-size:12.5px;
+  }
+  table.sheet-balance td.blabel{color:var(--ink-2);}
+  table.sheet-balance tr.rob td{background:#F5E6A8;font-weight:700;}
+  table.sheet-balance input{
+    all:unset;
+    width:70px;
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:700;
+    font-size:13px;
+    color:var(--ink);
+    border-bottom:1px dashed var(--line);
+  }
   .add-row input{flex:1;min-width:120px;}
   select{
     font-family:'Work Sans',sans-serif;
@@ -581,22 +673,6 @@
   .expiry-alert .exp-days{font-family:'IBM Plex Mono',monospace;font-weight:600;}
   .settings-note{margin:8px 0 0;flex-basis:100%;color:var(--grey);font-size:12.5px;}
 </style>
-
-<style id="voucher-summary-style">
-.voucher-summary{margin-top:14px;border:1px solid #ddd;border-radius:8px;overflow:hidden;background:#fff}
-.voucher-summary .summary-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-bottom:1px solid #eee}
-.voucher-summary .summary-row:last-child{border-bottom:0}
-.voucher-summary .summary-row strong{min-width:70px;text-align:right}
-.voucher-summary input{width:90px;padding:6px 8px;text-align:right}
-</style>
-
-
-<style id="voucher-reset-style">
-.voucher-reset-wrap{margin-top:10px;text-align:right}
-.voucher-reset-btn{padding:8px 14px;border:1px solid #bbb;border-radius:6px;background:#fff;cursor:pointer}
-.voucher-reset-btn:hover{opacity:.85}
-</style>
-
 </head>
 <body>
 
@@ -618,26 +694,6 @@
       <button class="btn btn-outline" id="closeReceiptBtn">Close</button>
       <button class="btn btn-teal" id="printReceiptBtn">Print copy</button>
     </div>
-  </div>
-</div>
-
-
-<div class="voucher-summary" id="voucherSummary">
-  <div class="summary-row">
-    <span>Total vouchers given to all crew — Current Month</span>
-    <strong id="currentMonthGiven">0</strong>
-  </div>
-  <div class="summary-row">
-    <span>ROB vouchers — Last Month</span>
-    <strong id="robLastMonth">0</strong>
-  </div>
-  <div class="summary-row">
-    <span>Vouchers received from office — Current Month</span>
-    <input id="officeVouchersReceived" type="number" min="0" step="1" value="0" inputmode="numeric">
-  </div>
-  <div class="summary-row">
-    <span>ROB vouchers — Current Month</span>
-    <strong id="robCurrentMonth">0</strong>
   </div>
 </div>
 
@@ -2991,8 +3047,8 @@ var qrcode = function() {
     monthTxns: {},
     declarations: {},
     vouchers: [],
-    voucherView: 'crew',
-    voucherSummary: {lastMonthROB: 0, officeReceived: 0},
+    voucherMeta: {vessel:'', place:''},
+    voucherStock: {},
     cart: {},
     declareCart: {},
     selectedCrewId: null,
@@ -3179,7 +3235,8 @@ var qrcode = function() {
     }
     state.crew = await storageGet('crew', []);
     state.vouchers = await storageGet('vouchers', []);
-    state.voucherSummary = await storageGet('voucherSummary', {lastMonthROB: 0, officeReceived: 0});
+    state.voucherMeta = await storageGet('voucherMeta', {vessel:'', place:''});
+    state.voucherStock = await storageGet('voucherStock', {});
     var rawSettings = await storageGet('settings', null);
     if(!rawSettings){
       state.settings = {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null};
@@ -3547,62 +3604,70 @@ var qrcode = function() {
     '</div>';
   }
 
-  function voucherMonthCountByCrew(){
-    var now = new Date(), y=now.getFullYear(), m=now.getMonth(), totals={};
-    state.vouchers.forEach(function(v){
-      var d = new Date(v.dateISO);
-      if(!isNaN(d) && d.getFullYear()===y && d.getMonth()===m){
-        totals[v.crewId] = (totals[v.crewId] || 0) + 1;
-      }
-    });
-    return totals;
+  function fmtSheetDate(d){
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return d.getDate()+'-'+months[d.getMonth()]+'-'+String(d.getFullYear()).slice(-2);
   }
 
   function renderVouchers(){
-    var totalByCrewId = voucherMonthCountByCrew();
-    var totalGiven = 0;
-    var crewRows = state.crew.map(function(c){
-      var totalVouchers = totalByCrewId[c.id] || 0;
-      totalGiven += totalVouchers;
-      return '<tr><td>'+escapeHtml(c.name)+'</td>'+
-        '<td class="month-total">'+totalVouchers+'</td>'+
-        '<td class="row-actions"><button class="btn btn-teal" data-give-voucher="'+c.id+'">Give voucher</button></td></tr>';
-    }).join('');
-    if(!state.crew.length) crewRows = '<tr><td colspan="3" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
-
     var now = new Date();
-    var currentROB = Math.max(0, Number(state.voucherSummary.officeReceived || 0) - totalGiven);
+    var periodKey = monthKey(now);
+    var periodLbl = now.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    var prevDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    var prevLbl = prevDate.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+
+    var thisPeriodVouchers = state.vouchers.filter(function(v){ return monthKey(new Date(v.dateISO)) === periodKey; });
+    var countByCrew = {};
+    thisPeriodVouchers.forEach(function(v){ countByCrew[v.crewId] = (countByCrew[v.crewId]||0) + 1; });
+    var distributed = thisPeriodVouchers.length;
+
+    var stock = state.voucherStock[periodKey] || {opening:0, restocked:0};
+    var closing = (Number(stock.opening)||0) + (Number(stock.restocked)||0) - distributed;
+
+    var rows = state.crew.map(function(c, i){
+      var count = countByCrew[c.id] || 0;
+      return '<tr><td class="center">'+(i+1)+'</td>'+
+        '<td>'+escapeHtml(c.name)+'</td>'+
+        '<td class="center">'+count+'</td>'+
+        '<td class="center"><button class="give-voucher-btn" data-give-voucher="'+c.id+'">+ Add</button></td></tr>';
+    }).join('');
+    if(!state.crew.length) rows = '<tr><td colspan="4" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
+
+    var log = thisPeriodVouchers.slice().sort(function(a,b){ return new Date(b.dateISO) - new Date(a.dateISO); });
+    var logHtml = log.length ? log.map(function(v){
+      var d = new Date(v.dateISO);
+      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(v.crewName)+'</td>'+
+        '<td class="row-actions"><button class="icon-btn" data-del-voucher="'+v.id+'">Remove</button></td></tr>';
+    }).join('') : '<tr><td colspan="3" class="empty-note">No vouchers logged yet this period.</td></tr>';
 
     return ''+
-      '<div class="subnav voucher-subnav">'+
-        '<button data-voucher-view="crew"'+(state.voucherView==='crew'?' class="active"':'')+'>Crew vouchers</button>'+
-        '<button data-voucher-view="log"'+(state.voucherView==='log'?' class="active"':'')+'>Voucher Log</button>'+
+    '<h2 class="page-title">Internet vouchers</h2>'+
+    '<p class="page-sub">Tap "+ Add" against a crew member to log a voucher handed out today. Vouchers Received tallies up automatically for '+periodLbl+'.</p>'+
+    '<div class="sheet-card">'+
+      '<div class="sheet-title">Crew Internet Vouchers</div>'+
+      '<div class="sheet-meta">'+
+        '<div class="lbl">VESSEL:</div><div><input type="text" id="voucherVessel" placeholder="Vessel name" value="'+escapeHtml(state.voucherMeta.vessel||'')+'"></div>'+
+        '<div class="lbl">PERIOD:</div><div>'+periodLbl+'</div>'+
+        '<div class="lbl">PLACE:</div><div><input type="text" id="voucherPlace" placeholder="e.g. At Sea" value="'+escapeHtml(state.voucherMeta.place||'')+'"></div>'+
+        '<div class="lbl">DATE:</div><div>'+fmtSheetDate(now)+'</div>'+
       '</div>'+
-      (state.voucherView==='crew' ?
-        '<h2 class="page-title">Internet vouchers</h2>'+
-        '<p class="page-sub">Track internet vouchers handed out to crew. Each crew total is for the current calendar month.</p>'+
-        '<div class="card">'+
-          '<h3>Crew</h3>'+
-          '<div class="table-wrap"><table class="plain"><thead><tr><th>Name</th><th>Total given</th><th></th></tr></thead><tbody>'+crewRows+'</tbody></table></div>'+
-        '</div>'+
-        '<div class="card">'+
-          '<h3>Monthly voucher summary</h3>'+
-          '<div class="summary-row"><span>Total vouchers given to all crew — Current Month</span><strong>'+totalGiven+'</strong></div>'+
-          '<div class="summary-row"><span>ROB vouchers — Last Month</span><input id="voucherLastMonthROB" type="number" min="0" step="1" value="'+Number(state.voucherSummary.lastMonthROB||0)+'"></div>'+
-          '<div class="summary-row"><span>Vouchers received from office — Current Month</span><input id="voucherOfficeReceived" type="number" min="0" step="1" value="'+Number(state.voucherSummary.officeReceived||0)+'"></div>'+
-          '<div class="summary-row"><span>ROB vouchers — Current Month</span><strong>'+currentROB+'</strong></div>'+
-        '</div>'+
-        '<div class="voucher-reset-wrap"><button type="button" class="voucher-reset-btn" id="resetVoucherMonth">Reset for Next Month</button></div>'
-      :
-        '<h2 class="page-title">Voucher Log</h2>'+
-        '<p class="page-sub">Complete history of internet vouchers given to crew.</p>'+
-        '<div class="card"><div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Crew</th><th></th></tr></thead><tbody>'+
-        (state.vouchers.slice().sort(function(a,b){return new Date(b.dateISO)-new Date(a.dateISO);}).map(function(v){
-          var d=new Date(v.dateISO);
-          return '<tr><td>'+d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</td><td>'+escapeHtml(v.crewName)+'</td><td class="row-actions"><button class="icon-btn" data-del-voucher="'+v.id+'">Remove</button></td></tr>';
-        }).join('') || '<tr><td colspan="3" class="empty-note">No vouchers logged yet.</td></tr>')+
-        '</tbody></table></div></div>'
-      );
+      '<div class="sheet-table-wrap">'+
+      '<table class="sheet-table"><thead><tr><th>No.</th><th>Name</th><th>Vouchers<br>Received</th><th>Add</th></tr></thead><tbody>'+
+        rows+
+        '<tr class="total-row"><td colspan="2" class="center">TOTAL:</td><td class="center">'+distributed+'</td><td></td></tr>'+
+      '</tbody></table>'+
+      '</div>'+
+      '<table class="sheet-balance">'+
+        '<tr><td class="blabel">ROB end of '+prevLbl+'</td><td><input type="number" min="0" step="1" id="voucherOpening" value="'+(stock.opening||0)+'"></td></tr>'+
+        '<tr><td class="blabel">Received on board for '+periodLbl+'</td><td><input type="number" min="0" step="1" id="voucherRestocked" value="'+(stock.restocked||0)+'"></td></tr>'+
+        '<tr><td class="blabel">Received by crew for '+periodLbl+'</td><td>'+distributed+'</td></tr>'+
+        '<tr class="rob"><td>ROB end of '+periodLbl+'</td><td>'+closing+'</td></tr>'+
+      '</table>'+
+    '</div>'+
+    '<div class="card">'+
+      '<h3>Voucher log — '+periodLbl+'</h3>'+
+      '<div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Crew</th><th></th></tr></thead><tbody>'+logHtml+'</tbody></table></div>'+
+    '</div>';
   }
 
   function renderReports(){
@@ -3839,37 +3904,27 @@ var qrcode = function() {
       el.addEventListener('click', function(){ removeDeclaration(el.dataset.delDecl); });
     });
 
-    main.querySelectorAll('[data-voucher-view]').forEach(function(el){
-      el.addEventListener('click', function(){ state.voucherView = el.dataset.voucherView; render(); });
-    });
-    var voucherLast = document.getElementById('voucherLastMonthROB');
-    if(voucherLast) voucherLast.addEventListener('change', async function(){
-      state.voucherSummary.lastMonthROB = Math.max(0, parseInt(this.value||'0',10)||0);
-      await storageSet('voucherSummary', state.voucherSummary);
-      render();
-    });
-    var voucherOffice = document.getElementById('voucherOfficeReceived');
-    if(voucherOffice) voucherOffice.addEventListener('change', async function(){
-      state.voucherSummary.officeReceived = Math.max(0, parseInt(this.value||'0',10)||0);
-      await storageSet('voucherSummary', state.voucherSummary);
-      render();
-    });
-    var resetVoucher = document.getElementById('resetVoucherMonth');
-    if(resetVoucher) resetVoucher.addEventListener('click', async function(){
-      if(!confirm('Reset for the next month? The current ROB will become Last Month ROB, office receipts will reset to 0, and voucher history will be kept.')) return;
-      var totals = voucherMonthCountByCrew(), given = Object.keys(totals).reduce(function(n,k){return n+totals[k];},0);
-      state.voucherSummary.lastMonthROB = Math.max(0, Number(state.voucherSummary.officeReceived||0) - given);
-      state.voucherSummary.officeReceived = 0;
-      await storageSet('voucherSummary', state.voucherSummary);
-      render();
-    });
-
     main.querySelectorAll('[data-give-voucher]').forEach(function(el){
       el.addEventListener('click', function(){ giveVoucher(el.dataset.giveVoucher); });
     });
     main.querySelectorAll('[data-del-voucher]').forEach(function(el){
       el.addEventListener('click', function(){ removeVoucher(el.dataset.delVoucher); });
     });
+
+    var voucherVessel = document.getElementById('voucherVessel');
+    if(voucherVessel) voucherVessel.addEventListener('change', async function(){
+      state.voucherMeta.vessel = voucherVessel.value;
+      await storageSet('voucherMeta', state.voucherMeta);
+    });
+    var voucherPlace = document.getElementById('voucherPlace');
+    if(voucherPlace) voucherPlace.addEventListener('change', async function(){
+      state.voucherMeta.place = voucherPlace.value;
+      await storageSet('voucherMeta', state.voucherMeta);
+    });
+    var voucherOpening = document.getElementById('voucherOpening');
+    if(voucherOpening) voucherOpening.addEventListener('change', function(){ saveVoucherStockField('opening', voucherOpening.value); });
+    var voucherRestocked = document.getElementById('voucherRestocked');
+    if(voucherRestocked) voucherRestocked.addEventListener('change', function(){ saveVoucherStockField('restocked', voucherRestocked.value); });
 
     var monthSelect = document.getElementById('monthSelect');
     if(monthSelect) monthSelect.addEventListener('change', async function(){
@@ -4217,6 +4272,15 @@ var qrcode = function() {
     render();
   }
 
+  async function saveVoucherStockField(field, value){
+    var periodKey = monthKey(new Date());
+    var stock = state.voucherStock[periodKey] || {opening:0, restocked:0};
+    stock[field] = Math.max(0, Math.round(Number(value)) || 0);
+    state.voucherStock[periodKey] = stock;
+    await storageSet('voucherStock', state.voucherStock);
+    render();
+  }
+
   function buildReceiptQrSvg(txn){
     try{
       var d = new Date(txn.dateISO);
@@ -4286,8 +4350,6 @@ var qrcode = function() {
   loadAll();
 })();
 </script>
-
-
 
 </body>
 </html>
