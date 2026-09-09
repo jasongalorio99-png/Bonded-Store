@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -501,6 +501,7 @@
     letter-spacing:0.4px;
   }
   table.sheet-table td.center{text-align:center;}
+  table.editable-table td.center{text-align:center;}
   table.sheet-table tr.total-row td{font-weight:700;background:var(--paper-2);}
   .give-voucher-btn{
     all:unset;
@@ -592,6 +593,17 @@
     text-align:center;
     white-space:nowrap;
   }
+  table.editable-table th.plain-th{
+    padding:8px 10px;
+    text-align:center;
+    font-weight:700;
+    text-transform:uppercase;
+    font-size:11px;
+    letter-spacing:0.3px;
+    color:var(--ink);
+    white-space:nowrap;
+  }
+  table.editable-table td.plain-td{padding:8px 10px;}
   .table-toolbar{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
   .add-row input{flex:1;min-width:120px;}
   select{
@@ -3489,21 +3501,36 @@ var qrcode = function() {
     '</div>';
   }
 
+  var CREW_FIELDS = [
+    {key:'name', label:'Name'},
+    {key:'rank', label:'Rank'},
+    {key:'nationality', label:'Nationality'},
+    {key:'dob', label:'Date of Birth'},
+    {key:'pob', label:'Place of Birth'},
+    {key:'passportNo', label:'Passport No.'},
+    {key:'passportExpiry', label:'Passport Expiry'}
+  ];
+
   function renderCrew(){
-    var rows = state.crew.map(function(c){
-      return '<tr><td>'+escapeHtml(c.name)+'</td>'+
+    var headerCells = CREW_FIELDS.map(function(f){ return '<th class="plain-th">'+f.label+'</th>'; }).join('');
+
+    var rows = state.crew.map(function(c, i){
+      var cells = CREW_FIELDS.map(function(f){
+        return '<td><input type="text" class="cell-input" data-crew-id="'+c.id+'" data-field="'+f.key+'" value="'+escapeHtml(c[f.key] || '')+'"></td>';
+      }).join('');
+      return '<tr><td class="plain-td center">'+(i+1)+'</td>'+cells+
         '<td class="row-actions"><button class="icon-btn" data-del-crew="'+c.id+'">Remove</button></td></tr>';
     }).join('');
-    if(!state.crew.length) rows = '<tr><td colspan="2" class="empty-note">No crew members yet.</td></tr>';
+    if(!state.crew.length) rows = '<tr><td colspan="'+(CREW_FIELDS.length+2)+'" class="empty-note">No crew members yet. Tap "+ Add crew member" to start.</td></tr>';
+
     return ''+
     '<h2 class="page-title">Crew</h2>'+
     '<p class="page-sub">Add the people who buy from the store. Their purchases roll up for payroll deduction.</p>'+
-    '<div class="card">'+
-      '<h3>Crew list</h3>'+
-      '<div class="table-wrap"><table class="plain"><thead><tr><th>Name</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-      '<div class="add-row">'+
-        '<input type="text" id="newCrewName" placeholder="Full name">'+
-        '<button class="btn btn-teal" id="addCrewBtn">Add crew member</button>'+
+    '<div class="sheet-card">'+
+      '<div class="sheet-title">Crew List</div>'+
+      '<div class="sheet-table-wrap"><table class="editable-table"><thead><tr><th class="plain-th">No.</th>'+headerCells+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<div class="table-toolbar">'+
+        '<button class="btn btn-teal" id="addCrewBtn">+ Add crew member</button>'+
       '</div>'+
     '</div>';
   }
@@ -4011,10 +4038,11 @@ var qrcode = function() {
 
     var addCrewBtn = document.getElementById('addCrewBtn');
     if(addCrewBtn) addCrewBtn.addEventListener('click', addCrew);
-    var crewInput = document.getElementById('newCrewName');
-    if(crewInput) crewInput.addEventListener('keydown', function(e){ if(e.key==='Enter') addCrew(); });
     main.querySelectorAll('[data-del-crew]').forEach(function(el){
       el.addEventListener('click', function(){ removeCrew(el.dataset.delCrew); });
+    });
+    main.querySelectorAll('[data-crew-id][data-field]').forEach(function(el){
+      el.addEventListener('change', function(){ updateCrewField(el.dataset.crewId, el.dataset.field, el.value); });
     });
 
     var addItemBtn = document.getElementById('addItemBtn');
@@ -4313,18 +4341,21 @@ var qrcode = function() {
   }
 
   async function addCrew(){
-    var input = document.getElementById('newCrewName');
-    var name = input.value.trim();
-    if(!name) return;
-    state.crew.push({id:uid(), name:name});
+    state.crew.push({id:uid(), name:'', rank:'', nationality:'', dob:'', pob:'', passportNo:'', passportExpiry:''});
     await storageSet('crew', state.crew);
     render();
   }
   async function removeCrew(id){
+    if(!confirm('Remove this crew member?')) return;
     state.crew = state.crew.filter(function(c){return c.id!==id;});
     if(state.selectedCrewId===id) state.selectedCrewId=null;
     await storageSet('crew', state.crew);
     render();
+  }
+  async function updateCrewField(crewId, field, value){
+    var c = state.crew.find(function(x){ return x.id === crewId; });
+    if(c) c[field] = value;
+    await storageSet('crew', state.crew);
   }
   async function addItem(){
     var cat = document.getElementById('newItemCat').value.trim() || 'Other';
