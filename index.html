@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -532,6 +532,15 @@
     color:var(--ink);
     border-bottom:1px dashed var(--line);
   }
+  .sheet-footer{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+    padding:14px 16px;
+    border-top:1px solid var(--line);
+  }
+  .sheet-footer-note{font-size:12px;color:var(--grey);}
   .add-row input{flex:1;min-width:120px;}
   select{
     font-family:'Work Sans',sans-serif;
@@ -3286,6 +3295,7 @@ var qrcode = function() {
     else if(state.tab === 'items') main.innerHTML = renderItems();
     else if(state.tab === 'declare') main.innerHTML = renderDeclare();
     else if(state.tab === 'vouchers') main.innerHTML = renderVouchers();
+    else if(state.tab === 'vouchersLog') main.innerHTML = renderVouchersLog();
     else if(state.tab === 'reports') main.innerHTML = renderReports();
     bindTabEvents();
     updateExpiryNavBadge();
@@ -3609,12 +3619,24 @@ var qrcode = function() {
     return d.getDate()+'-'+months[d.getMonth()]+'-'+String(d.getFullYear()).slice(-2);
   }
 
+  function voucherSubNav(active){
+    var tabs = [
+      {id:'vouchers', label:'Vouchers'},
+      {id:'vouchersLog', label:'Log'}
+    ];
+    return '<div class="subnav">'+tabs.map(function(t){
+      return '<button data-tab="'+t.id+'"'+(active===t.id?' class="active"':'')+'>'+t.label+'</button>';
+    }).join('')+'</div>';
+  }
+
   function renderVouchers(){
     var now = new Date();
     var periodKey = monthKey(now);
     var periodLbl = now.toLocaleDateString(undefined,{month:'long',year:'numeric'});
     var prevDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
     var prevLbl = prevDate.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    var nextDate = new Date(now.getFullYear(), now.getMonth()+1, 1);
+    var nextLbl = nextDate.toLocaleDateString(undefined,{month:'long',year:'numeric'});
 
     var thisPeriodVouchers = state.vouchers.filter(function(v){ return monthKey(new Date(v.dateISO)) === periodKey; });
     var countByCrew = {};
@@ -3633,14 +3655,8 @@ var qrcode = function() {
     }).join('');
     if(!state.crew.length) rows = '<tr><td colspan="4" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
 
-    var log = thisPeriodVouchers.slice().sort(function(a,b){ return new Date(b.dateISO) - new Date(a.dateISO); });
-    var logHtml = log.length ? log.map(function(v){
-      var d = new Date(v.dateISO);
-      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(v.crewName)+'</td>'+
-        '<td class="row-actions"><button class="icon-btn" data-del-voucher="'+v.id+'">Remove</button></td></tr>';
-    }).join('') : '<tr><td colspan="3" class="empty-note">No vouchers logged yet this period.</td></tr>';
-
     return ''+
+    voucherSubNav('vouchers')+
     '<h2 class="page-title">Internet vouchers</h2>'+
     '<p class="page-sub">Tap "+ Add" against a crew member to log a voucher handed out today. Vouchers Received tallies up automatically for '+periodLbl+'.</p>'+
     '<div class="sheet-card">'+
@@ -3663,9 +3679,26 @@ var qrcode = function() {
         '<tr><td class="blabel">Received by crew for '+periodLbl+'</td><td>'+distributed+'</td></tr>'+
         '<tr class="rob"><td>ROB end of '+periodLbl+'</td><td>'+closing+'</td></tr>'+
       '</table>'+
-    '</div>'+
+      '<div class="sheet-footer">'+
+        '<button class="btn btn-outline" id="voucherRolloverBtn">Reset for '+nextLbl+'</button>'+
+        '<span class="sheet-footer-note">Carries this month\'s ROB ('+closing+') into next month\'s opening balance, and clears every crew member\'s count back to 0.</span>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function renderVouchersLog(){
+    var log = state.vouchers.slice().sort(function(a,b){ return new Date(b.dateISO) - new Date(a.dateISO); });
+    var logHtml = log.length ? log.map(function(v){
+      var d = new Date(v.dateISO);
+      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(v.crewName)+'</td>'+
+        '<td class="row-actions"><button class="icon-btn" data-del-voucher="'+v.id+'">Remove</button></td></tr>';
+    }).join('') : '<tr><td colspan="3" class="empty-note">No vouchers logged yet.</td></tr>';
+
+    return ''+
+    voucherSubNav('vouchersLog')+
+    '<h2 class="page-title">Voucher log</h2>'+
+    '<p class="page-sub">Full history of every voucher logged to crew, across all months.</p>'+
     '<div class="card">'+
-      '<h3>Voucher log — '+periodLbl+'</h3>'+
       '<div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Crew</th><th></th></tr></thead><tbody>'+logHtml+'</tbody></table></div>'+
     '</div>';
   }
@@ -3925,6 +3958,8 @@ var qrcode = function() {
     if(voucherOpening) voucherOpening.addEventListener('change', function(){ saveVoucherStockField('opening', voucherOpening.value); });
     var voucherRestocked = document.getElementById('voucherRestocked');
     if(voucherRestocked) voucherRestocked.addEventListener('change', function(){ saveVoucherStockField('restocked', voucherRestocked.value); });
+    var voucherRolloverBtn = document.getElementById('voucherRolloverBtn');
+    if(voucherRolloverBtn) voucherRolloverBtn.addEventListener('click', rolloverVoucherMonth);
 
     var monthSelect = document.getElementById('monthSelect');
     if(monthSelect) monthSelect.addEventListener('change', async function(){
@@ -4278,6 +4313,31 @@ var qrcode = function() {
     stock[field] = Math.max(0, Math.round(Number(value)) || 0);
     state.voucherStock[periodKey] = stock;
     await storageSet('voucherStock', state.voucherStock);
+    render();
+  }
+
+  async function rolloverVoucherMonth(){
+    var now = new Date();
+    var periodKey = monthKey(now);
+    var periodLbl = now.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    var nextDate = new Date(now.getFullYear(), now.getMonth()+1, 1);
+    var nextKey = monthKey(nextDate);
+    var nextLbl = nextDate.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+
+    var stock = state.voucherStock[periodKey] || {opening:0, restocked:0};
+    var distributed = state.vouchers.filter(function(v){ return monthKey(new Date(v.dateISO)) === periodKey; }).length;
+    var closing = (Number(stock.opening)||0) + (Number(stock.restocked)||0) - distributed;
+
+    if(!confirm('Carry over '+closing+' vouchers as the opening ROB for '+nextLbl+', and clear every crew member\'s voucher count for '+periodLbl+'?\n\nThis removes this month\'s '+distributed+' logged entries and cannot be undone.')) return;
+
+    var nextStock = state.voucherStock[nextKey] || {opening:0, restocked:0};
+    nextStock.opening = closing;
+    state.voucherStock[nextKey] = nextStock;
+    state.vouchers = state.vouchers.filter(function(v){ return monthKey(new Date(v.dateISO)) !== periodKey; });
+
+    await storageSet('voucherStock', state.voucherStock);
+    await storageSet('vouchers', state.vouchers);
+    alert('Done. '+nextLbl+' will open with a ROB of '+closing+', and this month\'s voucher counts are cleared.');
     render();
   }
 
