@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -199,6 +199,31 @@
   .subnav button.active{
     background:var(--stamp);
     border-color:var(--stamp-dark);
+    color:#fff;
+    font-weight:600;
+  }
+  .gratitude-options{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:12px;
+  }
+  .chip-btn{
+    all:unset;
+    box-sizing:border-box;
+    cursor:pointer;
+    padding:8px 16px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    background:var(--paper-2);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    color:var(--ink-2);
+  }
+  .chip-btn:hover{border-color:var(--teal);}
+  .chip-btn.active{
+    background:var(--teal);
+    border-color:var(--teal-dark);
     color:#fff;
     font-weight:600;
   }
@@ -3128,12 +3153,14 @@ var qrcode = function() {
     voucherMeta: {vessel:'', place:''},
     voucherStock: {},
     allotments: {
-      filipino: {columns:[], rows:[]},
-      nonFilipino: {columns:[], rows:[]}
+      filipino: {columns:[], cellData:{}},
+      nonFilipino: {columns:[], cellData:{}}
     },
     cart: {},
     declareCart: {},
     selectedCrewId: null,
+    gratitudeOpen: false,
+    gratitude: {sponsor:'', port:'', forWhom:''},
     declareCrewId: null,
     tab: 'home',
     settings: {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null},
@@ -3325,15 +3352,10 @@ var qrcode = function() {
     state.voucherMeta = await storageGet('voucherMeta', {vessel:'', place:''});
     state.voucherStock = await storageGet('voucherStock', {});
     state.allotments = await storageGet('allotments', {
-      filipino: {
-        columns: [{id:'c1', label:'Name'}, {id:'c2', label:'Allotment'}],
-        rows: [{id: uid(), cells: {}}]
-      },
-      nonFilipino: {
-        columns: [{id:'c1', label:'Name'}, {id:'c2', label:'Allotment'}],
-        rows: [{id: uid(), cells: {}}]
-      }
+      filipino: {columns: [{id:'c1', label:'Allotment'}], cellData: {}},
+      nonFilipino: {columns: [{id:'c1', label:'Allotment'}], cellData: {}}
     });
+    if(migrateAllotmentsIfNeeded()) await storageSet('allotments', state.allotments);
     var rawSettings = await storageGet('settings', null);
     if(!rawSettings){
       state.settings = {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null};
@@ -3475,7 +3497,22 @@ var qrcode = function() {
     },0);
 
     var selectedCrew = state.crew.find(function(c){return c.id===state.selectedCrewId;});
-    var canComplete = selectedCrew && cartEntries.length>0;
+    var gratitudeActive = !!state.gratitude.sponsor;
+    var canComplete = (selectedCrew || gratitudeActive) && cartEntries.length>0;
+
+    var GRATITUDE_SPONSORS = ['Charterer', 'Owner', 'Crew Welfare'];
+    var gratitudeChips = GRATITUDE_SPONSORS.map(function(opt){
+      return '<button class="chip-btn'+(state.gratitude.sponsor===opt?' active':'')+'" data-gratitude-sponsor="'+opt+'">'+opt+'</button>';
+    }).join('');
+    var gratitudeCardHtml = '<div class="card"><h3>Gratitudes</h3>'+
+      '<button class="btn btn-outline" id="gratitudeToggleBtn">Gratitudes</button>'+
+      (state.gratitudeOpen ? '<div class="gratitude-options">'+gratitudeChips+'</div>' : '')+
+      (state.gratitudeOpen && state.gratitude.sponsor ?
+        '<div class="add-row" style="margin-top:12px;">'+
+          '<input type="text" id="gratitudePort" placeholder="Port name" value="'+escapeHtml(state.gratitude.port)+'">'+
+          '<input type="text" id="gratitudeForWhom" placeholder="For whom / purpose" value="'+escapeHtml(state.gratitude.forWhom)+'">'+
+        '</div>' : '')+
+    '</div>';
 
     var mk = periodKeyForDate(new Date());
     var todays = (state.monthTxns[mk] || []).filter(function(t){
@@ -3490,6 +3527,18 @@ var qrcode = function() {
         '<button class="icon-btn" data-void="'+t.id+'">Void</button></td></tr>';
     }).join('') : '<tr><td colspan="4" class="empty-note">No sales recorded yet today.</td></tr>';
 
+    var currentSaleLabel;
+    if(gratitudeActive){
+      currentSaleLabel = '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">Gratitude — '+escapeHtml(state.gratitude.sponsor)+
+        (state.gratitude.port ? ' &middot; '+escapeHtml(state.gratitude.port) : '')+
+        (state.gratitude.forWhom ? '<br><span style="font-weight:400;font-size:12.5px;color:var(--grey);">For: '+escapeHtml(state.gratitude.forWhom)+'</span>' : '')+
+      '</div>';
+    } else if(selectedCrew){
+      currentSaleLabel = '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">'+escapeHtml(selectedCrew.name)+'</div>';
+    } else {
+      currentSaleLabel = '<div class="empty-note" style="color:#8E9AB3;">Select a crew member or choose Gratitudes</div>';
+    }
+
     return ''+
     slopchestSubNav('sell')+
     '<h2 class="page-title">Slopchest</h2>'+
@@ -3497,12 +3546,13 @@ var qrcode = function() {
     '<div class="sell-layout">'+
       '<div>'+
         '<div class="card"><h3>Crew member</h3><div class="crew-grid">'+crewChips+'</div></div>'+
+        gratitudeCardHtml+
         '<div class="card"><h3>Stock</h3>'+catsHtml+'</div>'+
         '<div class="card"><h3>Today\'s sales</h3><div class="table-wrap"><table class="plain"><thead><tr><th>Crew</th><th>Items</th><th>Total</th><th></th></tr></thead><tbody>'+todayHtml+'</tbody></table></div></div>'+
       '</div>'+
       '<div class="cart-panel">'+
         '<h3>Current sale</h3>'+
-        (selectedCrew ? '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">'+escapeHtml(selectedCrew.name)+'</div>' : '<div class="empty-note" style="color:#8E9AB3;">Select a crew member</div>')+
+        currentSaleLabel+
         (cartLines || '<div class="empty-note" style="color:#8E9AB3;">Cart is empty</div>')+
         '<div class="cart-total"><span class="label">Total</span><span class="amt">'+fmtMoney(total)+'</span></div>'+
         '<button class="btn btn-stamp btn-block" id="completeSaleBtn" '+(canComplete?'':'disabled')+'>Complete sale &amp; print receipt</button>'+
@@ -3518,22 +3568,73 @@ var qrcode = function() {
     {key:'dob', label:'Date of Birth', type:'date'}
   ];
 
+  function toISODateLocal(d){
+    var y = d.getFullYear();
+    var m = String(d.getMonth()+1).padStart(2,'0');
+    var day = String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
+
+  function daysUntilBirthday(dobStr){
+    if(!dobStr) return null;
+    var parts = dobStr.split('-');
+    if(parts.length !== 3) return null;
+    var month = parseInt(parts[1], 10) - 1;
+    var day = parseInt(parts[2], 10);
+    if(isNaN(month) || isNaN(day)) return null;
+    var today = new Date();
+    today.setHours(0,0,0,0);
+    var next = new Date(today.getFullYear(), month, day);
+    next.setHours(0,0,0,0);
+    if(next < today) next.setFullYear(next.getFullYear() + 1);
+    return Math.round((next - today) / (1000*60*60*24));
+  }
+
+  function getUpcomingBirthdays(){
+    return state.crew.map(function(c){
+      return {crew: c, days: daysUntilBirthday(c.dob)};
+    }).filter(function(x){
+      return x.days !== null && x.days >= 0 && x.days <= 7;
+    }).sort(function(a,b){ return a.days - b.days; });
+  }
+
   function renderCrew(){
+    var today = new Date();
+    var maxDob = toISODateLocal(today);
+    var minDob = toISODateLocal(new Date(today.getFullYear() - 80, today.getMonth(), today.getDate()));
+
     var headerCells = CREW_FIELDS.map(function(f){ return '<th class="plain-th">'+f.label+'</th>'; }).join('');
 
     var sortedCrew = state.crew.slice().sort(function(a,b){ return (a.no||0) - (b.no||0); });
     var rows = sortedCrew.map(function(c){
       var cells = CREW_FIELDS.map(function(f){
-        return '<td><input type="'+f.type+'" class="cell-input" data-crew-id="'+c.id+'" data-field="'+f.key+'" value="'+escapeHtml(c[f.key] || '')+'"></td>';
+        var rangeAttrs = f.type === 'date' ? ' min="'+minDob+'" max="'+maxDob+'"' : '';
+        return '<td><input type="'+f.type+'" class="cell-input" data-crew-id="'+c.id+'" data-field="'+f.key+'" value="'+escapeHtml(c[f.key] || '')+'"'+rangeAttrs+'></td>';
       }).join('');
       return '<tr><td class="plain-td center">'+(c.no||'')+'</td>'+cells+
         '<td class="row-actions"><button class="icon-btn" data-del-crew="'+c.id+'">Remove</button></td></tr>';
     }).join('');
     if(!state.crew.length) rows = '<tr><td colspan="'+(CREW_FIELDS.length+2)+'" class="empty-note">No crew members yet. Tap "+ Add crew member" to start.</td></tr>';
 
+    var upcoming = getUpcomingBirthdays();
+    var birthdayAlertHtml = '';
+    if(upcoming.length){
+      var lines = upcoming.map(function(x){
+        var label = x.days === 0
+          ? '<span class="exp-days">Today!</span>'
+          : '<span class="exp-days">in '+x.days+' day'+(x.days===1?'':'s')+'</span>';
+        return '<li>'+escapeHtml(x.crew.name || '(unnamed)')+' &mdash; '+label+'</li>';
+      }).join('');
+      birthdayAlertHtml = '<div class="expiry-alert">'+
+        '<h3>Upcoming birthdays (within 7 days)</h3>'+
+        '<ul>'+lines+'</ul>'+
+      '</div>';
+    }
+
     return ''+
     '<h2 class="page-title">Crew</h2>'+
     '<p class="page-sub">Add the people who buy from the store. Their purchases roll up for payroll deduction. When someone signs off, remove them and the next crew member you add will take their old No.</p>'+
+    birthdayAlertHtml+
     '<div class="sheet-card">'+
       '<div class="sheet-title">Crew List</div>'+
       '<div class="sheet-table-wrap"><table class="editable-table"><thead><tr><th class="plain-th">No.</th>'+headerCells+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
@@ -3744,44 +3845,56 @@ var qrcode = function() {
     }).join('')+'</div>';
   }
 
+  function isFilipinoNationality(nat){
+    if(!nat) return false;
+    var n = nat.trim().toLowerCase();
+    if(!n) return false;
+    return n === 'ph' || n === 'phl' || n.indexOf('filip') === 0 || n.indexOf('philip') === 0;
+  }
+
+  function crewForAllotmentKind(kind){
+    return state.crew.filter(function(c){
+      var isFil = isFilipinoNationality(c.nationality);
+      return kind === 'filipino' ? isFil : !isFil;
+    }).sort(function(a,b){ return (a.no||0) - (b.no||0); });
+  }
+
   function renderAllotments(kind){
-    var data = state.allotments[kind] || {columns:[], rows:[]};
-    var columns = data.columns;
-    var rows = data.rows;
+    var data = state.allotments[kind] || {columns:[], cellData:{}};
+    var columns = data.columns || [];
+    var cellData = data.cellData || {};
     var activeTabId = kind === 'filipino' ? 'allotFil' : 'allotNonFil';
     var kindLabel = kind === 'filipino' ? 'Filipino crew' : 'Non-Filipino crew';
+    var crewList = crewForAllotmentKind(kind);
 
     var headerCells = columns.map(function(col){
       return '<th><input type="text" class="col-label-input" data-allot-kind="'+kind+'" data-col-id="'+col.id+'" value="'+escapeHtml(col.label)+'" placeholder="Column name">'+
         '<button class="col-del-btn" data-del-col="'+col.id+'" data-allot-kind="'+kind+'">Remove column</button></th>';
     }).join('');
 
-    var bodyRows = rows.map(function(row){
+    var bodyRows = crewList.map(function(c){
+      var rowData = cellData[c.id] || {};
       var cells = columns.map(function(col){
-        var val = (row.cells && row.cells[col.id]) || '';
-        return '<td><input type="text" class="cell-input" data-allot-kind="'+kind+'" data-row-id="'+row.id+'" data-col-id="'+col.id+'" value="'+escapeHtml(val)+'"></td>';
+        var val = rowData[col.id] || '';
+        return '<td><input type="text" class="cell-input" data-allot-kind="'+kind+'" data-crew-id="'+c.id+'" data-col-id="'+col.id+'" value="'+escapeHtml(val)+'"></td>';
       }).join('');
-      return '<tr>'+cells+'<td class="row-actions"><button class="icon-btn" data-del-row="'+row.id+'" data-allot-kind="'+kind+'">Remove</button></td></tr>';
+      return '<tr><td class="plain-td center">'+(c.no||'')+'</td>'+
+        '<td class="plain-td">'+escapeHtml(c.name || '(unnamed)')+'</td>'+cells+'</tr>';
     }).join('');
 
-    if(!columns.length){
-      bodyRows = '';
-    } else if(!rows.length){
-      bodyRows = '<tr><td colspan="'+(columns.length+1)+'" class="empty-note">No rows yet. Tap "+ Add row" to start.</td></tr>';
+    if(!crewList.length){
+      bodyRows = '<tr><td colspan="'+(columns.length+2)+'" class="empty-note">No '+kindLabel+' yet. Add crew and set their Nationality on the Crew tab and they\'ll show up here automatically.</td></tr>';
     }
 
-    var tableHtml = columns.length ?
-      '<div class="table-wrap editable-table-wrap"><table class="editable-table"><thead><tr>'+headerCells+'<th></th></tr></thead><tbody>'+bodyRows+'</tbody></table></div>' :
-      '<p class="empty-note">No columns yet. Tap "+ Add column" to start building this table.</p>';
+    var tableHtml = '<div class="table-wrap editable-table-wrap"><table class="editable-table"><thead><tr><th class="plain-th">No.</th><th class="plain-th">Name</th>'+headerCells+'</tr></thead><tbody>'+bodyRows+'</tbody></table></div>';
 
     return ''+
     allotmentSubNav(activeTabId)+
     '<h2 class="page-title">Crew Allotments — '+kindLabel+'</h2>'+
-    '<p class="page-sub">Fully manual table — add or remove columns and rows, and edit any cell directly.</p>'+
+    '<p class="page-sub">No. and Name sync automatically from the Crew tab, split by Filipino / Non-Filipino nationality. Add columns for whatever else you need to track, and edit those cells directly.</p>'+
     '<div class="card">'+
       tableHtml+
       '<div class="table-toolbar">'+
-        '<button class="btn btn-teal" data-add-row="'+kind+'">+ Add row</button>'+
         '<button class="btn btn-outline" data-add-col="'+kind+'">+ Add column</button>'+
       '</div>'+
     '</div>';
@@ -4002,8 +4115,29 @@ var qrcode = function() {
     var crewSelect = document.getElementById('crewSelect');
     if(crewSelect) crewSelect.addEventListener('change', function(){
       state.selectedCrewId = crewSelect.value || null;
+      if(state.selectedCrewId){
+        state.gratitude = {sponsor:'', port:'', forWhom:''};
+        state.gratitudeOpen = false;
+      }
       render();
     });
+    var gratitudeToggleBtn = document.getElementById('gratitudeToggleBtn');
+    if(gratitudeToggleBtn) gratitudeToggleBtn.addEventListener('click', function(){
+      state.gratitudeOpen = !state.gratitudeOpen;
+      render();
+    });
+    main.querySelectorAll('[data-gratitude-sponsor]').forEach(function(el){
+      el.addEventListener('click', function(){
+        state.gratitude.sponsor = el.dataset.gratitudeSponsor;
+        state.selectedCrewId = null;
+        render();
+      });
+    });
+    var gratitudePort = document.getElementById('gratitudePort');
+    if(gratitudePort) gratitudePort.addEventListener('change', function(){ state.gratitude.port = gratitudePort.value; render(); });
+    var gratitudeForWhom = document.getElementById('gratitudeForWhom');
+    if(gratitudeForWhom) gratitudeForWhom.addEventListener('change', function(){ state.gratitude.forWhom = gratitudeForWhom.value; render(); });
+
     main.querySelectorAll('[data-toggle-cat]').forEach(function(el){
       el.addEventListener('click', function(){
         var cat = el.dataset.toggleCat;
@@ -4120,14 +4254,8 @@ var qrcode = function() {
     var voucherRolloverBtn = document.getElementById('voucherRolloverBtn');
     if(voucherRolloverBtn) voucherRolloverBtn.addEventListener('click', rolloverVoucherMonth);
 
-    main.querySelectorAll('[data-add-row]').forEach(function(el){
-      el.addEventListener('click', function(){ addAllotmentRow(el.dataset.addRow); });
-    });
     main.querySelectorAll('[data-add-col]').forEach(function(el){
       el.addEventListener('click', function(){ addAllotmentColumn(el.dataset.addCol); });
-    });
-    main.querySelectorAll('[data-del-row][data-allot-kind]').forEach(function(el){
-      el.addEventListener('click', function(){ removeAllotmentRow(el.dataset.allotKind, el.dataset.delRow); });
     });
     main.querySelectorAll('[data-del-col]').forEach(function(el){
       el.addEventListener('click', function(){ removeAllotmentColumn(el.dataset.allotKind, el.dataset.delCol); });
@@ -4135,8 +4263,8 @@ var qrcode = function() {
     main.querySelectorAll('.col-label-input').forEach(function(el){
       el.addEventListener('change', function(){ updateAllotmentColumnLabel(el.dataset.allotKind, el.dataset.colId, el.value); });
     });
-    main.querySelectorAll('.cell-input').forEach(function(el){
-      el.addEventListener('change', function(){ updateAllotmentCell(el.dataset.allotKind, el.dataset.rowId, el.dataset.colId, el.value); });
+    main.querySelectorAll('.cell-input[data-allot-kind]').forEach(function(el){
+      el.addEventListener('change', function(){ updateAllotmentCell(el.dataset.allotKind, el.dataset.crewId, el.dataset.colId, el.value); });
     });
 
     var monthSelect = document.getElementById('monthSelect');
@@ -4402,7 +4530,8 @@ var qrcode = function() {
 
   async function completeSale(){
     var crew = state.crew.find(function(c){return c.id===state.selectedCrewId;});
-    if(!crew) return;
+    var gratitudeActive = !!state.gratitude.sponsor;
+    if(!crew && !gratitudeActive) return;
     var cartEntries = Object.keys(state.cart).filter(function(id){return state.cart[id]>0;});
     if(!cartEntries.length) return;
 
@@ -4412,15 +4541,36 @@ var qrcode = function() {
     });
     var total = items.reduce(function(s,i){return s+i.price*i.qty;},0);
     var no = await nextReceiptNo();
-    var txn = {
-      id: uid(),
-      receiptNo: no,
-      crewId: crew.id,
-      crewName: crew.name,
-      dateISO: new Date().toISOString(),
-      items: items,
-      total: total
-    };
+    var txn;
+    if(crew){
+      txn = {
+        id: uid(),
+        receiptNo: no,
+        crewId: crew.id,
+        crewName: crew.name,
+        dateISO: new Date().toISOString(),
+        items: items,
+        total: total
+      };
+    } else {
+      var sponsor = state.gratitude.sponsor;
+      var port = state.gratitude.port.trim();
+      var forWhom = state.gratitude.forWhom.trim();
+      var label = 'Gratitude — '+sponsor+(port ? ' ('+port+')' : '')+(forWhom ? ' — '+forWhom : '');
+      txn = {
+        id: uid(),
+        receiptNo: no,
+        crewId: 'grat-'+uid(),
+        crewName: label,
+        isGratitude: true,
+        gratitudeSponsor: sponsor,
+        gratitudePort: port,
+        gratitudeForWhom: forWhom,
+        dateISO: new Date().toISOString(),
+        items: items,
+        total: total
+      };
+    }
     var mk = periodKeyForDate(new Date());
     state.monthTxns[mk] = state.monthTxns[mk] || [];
     state.monthTxns[mk].push(txn);
@@ -4428,6 +4578,8 @@ var qrcode = function() {
 
     state.cart = {};
     state.selectedCrewId = null;
+    state.gratitude = {sponsor:'', port:'', forWhom:''};
+    state.gratitudeOpen = false;
     render();
     showReceipt(txn);
   }
@@ -4529,6 +4681,45 @@ var qrcode = function() {
     render();
   }
 
+  function migrateAllotmentsIfNeeded(){
+    var changed = false;
+    ['filipino', 'nonFilipino'].forEach(function(kind){
+      var data = state.allotments[kind];
+      if(!data) return;
+      if(data.rows){
+        // Old format: freeform rows with a manual "Name" column. Try to match
+        // each row to a real crew member by name so existing data isn't lost.
+        var nameColId = null;
+        var customCols = [];
+        (data.columns || []).forEach(function(col){
+          if(!nameColId && /^name$/i.test(col.label || '')) nameColId = col.id;
+          else customCols.push(col);
+        });
+        var cellData = {};
+        (data.rows || []).forEach(function(row){
+          var rowName = nameColId ? ((row.cells && row.cells[nameColId]) || '') : '';
+          rowName = rowName.trim().toLowerCase();
+          if(!rowName) return;
+          var matched = state.crew.find(function(c){ return (c.name || '').trim().toLowerCase() === rowName; });
+          if(matched){
+            var vals = {};
+            customCols.forEach(function(col){ vals[col.id] = (row.cells && row.cells[col.id]) || ''; });
+            cellData[matched.id] = vals;
+          }
+        });
+        state.allotments[kind] = {
+          columns: customCols.length ? customCols : [{id: uid(), label:'Allotment'}],
+          cellData: cellData
+        };
+        changed = true;
+      } else if(!data.cellData){
+        data.cellData = {};
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   async function saveAllotments(){
     await storageSet('allotments', state.allotments);
   }
@@ -4546,21 +4737,7 @@ var qrcode = function() {
     if(!confirm('Remove this column? Any data in it will be lost.')) return;
     var data = state.allotments[kind];
     data.columns = data.columns.filter(function(c){ return c.id !== colId; });
-    data.rows.forEach(function(r){ if(r.cells) delete r.cells[colId]; });
-    await saveAllotments();
-    render();
-  }
-
-  async function addAllotmentRow(kind){
-    state.allotments[kind].rows.push({id: uid(), cells: {}});
-    await saveAllotments();
-    render();
-  }
-
-  async function removeAllotmentRow(kind, rowId){
-    if(!confirm('Remove this row?')) return;
-    var data = state.allotments[kind];
-    data.rows = data.rows.filter(function(r){ return r.id !== rowId; });
+    Object.keys(data.cellData || {}).forEach(function(crewId){ delete data.cellData[crewId][colId]; });
     await saveAllotments();
     render();
   }
@@ -4571,12 +4748,11 @@ var qrcode = function() {
     await saveAllotments();
   }
 
-  async function updateAllotmentCell(kind, rowId, colId, value){
-    var row = state.allotments[kind].rows.find(function(r){ return r.id === rowId; });
-    if(row){
-      if(!row.cells) row.cells = {};
-      row.cells[colId] = value;
-    }
+  async function updateAllotmentCell(kind, crewId, colId, value){
+    var data = state.allotments[kind];
+    if(!data.cellData) data.cellData = {};
+    if(!data.cellData[crewId]) data.cellData[crewId] = {};
+    data.cellData[crewId][colId] = value;
     await saveAllotments();
   }
 
@@ -4612,19 +4788,38 @@ var qrcode = function() {
       return '<div class="r-item-row"><span class="r-item-name">'+escapeHtml(i.name)+' x'+i.qty+'</span><span>'+fmtMoney(i.price*i.qty)+'</span></div>';
     }).join('');
     var qrSvg = buildReceiptQrSvg(txn);
-    var html = ''+
-      '<div class="r-center"><span class="r-stamp">BONDED STORE</span></div>'+
-      '<p class="r-sub r-center">crew purchase receipt</p>'+
-      '<div class="r-dash"></div>'+
-      '<div class="r-row"><span>Receipt</span><span>#'+String(txn.receiptNo).padStart(4,'0')+'</span></div>'+
-      '<div class="r-row"><span>Crew</span><span>'+escapeHtml(txn.crewName)+'</span></div>'+
-      '<div class="r-row muted"><span>Date</span><span>'+d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</span></div>'+
-      '<div class="r-dash"></div>'+
-      itemsHtml+
-      '<div class="r-dash"></div>'+
-      '<div class="r-total-row"><span>Total</span><span>'+fmtMoney(txn.total)+'</span></div>'+
-      (qrSvg ? ('<div class="r-qr">'+qrSvg+'</div>') : '')+
-      '<p class="r-foot">Deducted from salary at month end.<br>Keep this copy for your records.</p>';
+    var html;
+    if(txn.isGratitude){
+      html = ''+
+        '<div class="r-center"><span class="r-stamp">BONDED STORE</span></div>'+
+        '<p class="r-sub r-center">gratitude issue receipt</p>'+
+        '<div class="r-dash"></div>'+
+        '<div class="r-row"><span>Receipt</span><span>#'+String(txn.receiptNo).padStart(4,'0')+'</span></div>'+
+        '<div class="r-row"><span>Sponsor</span><span>'+escapeHtml(txn.gratitudeSponsor)+'</span></div>'+
+        (txn.gratitudePort ? '<div class="r-row"><span>Port</span><span>'+escapeHtml(txn.gratitudePort)+'</span></div>' : '')+
+        (txn.gratitudeForWhom ? '<div class="r-row"><span>For</span><span>'+escapeHtml(txn.gratitudeForWhom)+'</span></div>' : '')+
+        '<div class="r-row muted"><span>Date</span><span>'+d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</span></div>'+
+        '<div class="r-dash"></div>'+
+        itemsHtml+
+        '<div class="r-dash"></div>'+
+        '<div class="r-total-row"><span>Total</span><span>'+fmtMoney(txn.total)+'</span></div>'+
+        (qrSvg ? ('<div class="r-qr">'+qrSvg+'</div>') : '')+
+        '<p class="r-foot">Sponsored — not charged to crew payroll.<br>Keep this copy for your records.</p>';
+    } else {
+      html = ''+
+        '<div class="r-center"><span class="r-stamp">BONDED STORE</span></div>'+
+        '<p class="r-sub r-center">crew purchase receipt</p>'+
+        '<div class="r-dash"></div>'+
+        '<div class="r-row"><span>Receipt</span><span>#'+String(txn.receiptNo).padStart(4,'0')+'</span></div>'+
+        '<div class="r-row"><span>Crew</span><span>'+escapeHtml(txn.crewName)+'</span></div>'+
+        '<div class="r-row muted"><span>Date</span><span>'+d.toLocaleDateString()+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</span></div>'+
+        '<div class="r-dash"></div>'+
+        itemsHtml+
+        '<div class="r-dash"></div>'+
+        '<div class="r-total-row"><span>Total</span><span>'+fmtMoney(txn.total)+'</span></div>'+
+        (qrSvg ? ('<div class="r-qr">'+qrSvg+'</div>') : '')+
+        '<p class="r-foot">Deducted from salary at month end.<br>Keep this copy for your records.</p>';
+    }
     document.getElementById('receiptSlip').innerHTML = html;
     document.getElementById('receiptOverlay').classList.add('show');
   }
