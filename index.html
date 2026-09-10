@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -3311,6 +3311,11 @@ var qrcode = function() {
       await storageSet('catalog', state.catalog);
     }
     state.crew = await storageGet('crew', []);
+    var crewNeedsBackfill = false;
+    state.crew.forEach(function(c){
+      if(!c.no){ c.no = nextAvailableCrewNo(); crewNeedsBackfill = true; }
+    });
+    if(crewNeedsBackfill) await storageSet('crew', state.crew);
     state.vouchers = await storageGet('vouchers', []);
     state.voucherMeta = await storageGet('voucherMeta', {vessel:'', place:''});
     state.voucherStock = await storageGet('voucherStock', {});
@@ -3505,27 +3510,25 @@ var qrcode = function() {
     {key:'name', label:'Name'},
     {key:'rank', label:'Rank'},
     {key:'nationality', label:'Nationality'},
-    {key:'dob', label:'Date of Birth'},
-    {key:'pob', label:'Place of Birth'},
-    {key:'passportNo', label:'Passport No.'},
-    {key:'passportExpiry', label:'Passport Expiry'}
+    {key:'dob', label:'Date of Birth'}
   ];
 
   function renderCrew(){
     var headerCells = CREW_FIELDS.map(function(f){ return '<th class="plain-th">'+f.label+'</th>'; }).join('');
 
-    var rows = state.crew.map(function(c, i){
+    var sortedCrew = state.crew.slice().sort(function(a,b){ return (a.no||0) - (b.no||0); });
+    var rows = sortedCrew.map(function(c){
       var cells = CREW_FIELDS.map(function(f){
         return '<td><input type="text" class="cell-input" data-crew-id="'+c.id+'" data-field="'+f.key+'" value="'+escapeHtml(c[f.key] || '')+'"></td>';
       }).join('');
-      return '<tr><td class="plain-td center">'+(i+1)+'</td>'+cells+
+      return '<tr><td class="plain-td center">'+(c.no||'')+'</td>'+cells+
         '<td class="row-actions"><button class="icon-btn" data-del-crew="'+c.id+'">Remove</button></td></tr>';
     }).join('');
     if(!state.crew.length) rows = '<tr><td colspan="'+(CREW_FIELDS.length+2)+'" class="empty-note">No crew members yet. Tap "+ Add crew member" to start.</td></tr>';
 
     return ''+
     '<h2 class="page-title">Crew</h2>'+
-    '<p class="page-sub">Add the people who buy from the store. Their purchases roll up for payroll deduction.</p>'+
+    '<p class="page-sub">Add the people who buy from the store. Their purchases roll up for payroll deduction. When someone signs off, remove them and the next crew member you add will take their old No.</p>'+
     '<div class="sheet-card">'+
       '<div class="sheet-title">Crew List</div>'+
       '<div class="sheet-table-wrap"><table class="editable-table"><thead><tr><th class="plain-th">No.</th>'+headerCells+'<th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
@@ -4340,13 +4343,20 @@ var qrcode = function() {
     render();
   }
 
+  function nextAvailableCrewNo(){
+    var used = {};
+    state.crew.forEach(function(c){ if(c.no) used[c.no] = true; });
+    var n = 1;
+    while(used[n]) n++;
+    return n;
+  }
   async function addCrew(){
-    state.crew.push({id:uid(), name:'', rank:'', nationality:'', dob:'', pob:'', passportNo:'', passportExpiry:''});
+    state.crew.push({id:uid(), no: nextAvailableCrewNo(), name:'', rank:'', nationality:'', dob:''});
     await storageSet('crew', state.crew);
     render();
   }
   async function removeCrew(id){
-    if(!confirm('Remove this crew member?')) return;
+    if(!confirm('Remove this crew member? Their No. will be reused by the next crew member you add.')) return;
     state.crew = state.crew.filter(function(c){return c.id!==id;});
     if(state.selectedCrewId===id) state.selectedCrewId=null;
     await storageSet('crew', state.crew);
