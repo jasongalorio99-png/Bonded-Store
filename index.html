@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -587,6 +587,11 @@
     color:var(--ink);
   }
   .cell-input:focus{background:rgba(47,110,91,0.08);}
+  input[type="date"].cell-input{cursor:pointer;}
+  input[type="date"].cell-input::-webkit-calendar-picker-indicator{
+    cursor:pointer;
+    opacity:0.7;
+  }
   table.editable-table td.row-actions{
     border:1px solid var(--line);
     padding:6px 10px;
@@ -3507,10 +3512,10 @@ var qrcode = function() {
   }
 
   var CREW_FIELDS = [
-    {key:'name', label:'Name'},
-    {key:'rank', label:'Rank'},
-    {key:'nationality', label:'Nationality'},
-    {key:'dob', label:'Date of Birth'}
+    {key:'name', label:'Name', type:'text'},
+    {key:'rank', label:'Rank', type:'text'},
+    {key:'nationality', label:'Nationality', type:'text'},
+    {key:'dob', label:'Date of Birth', type:'date'}
   ];
 
   function renderCrew(){
@@ -3519,7 +3524,7 @@ var qrcode = function() {
     var sortedCrew = state.crew.slice().sort(function(a,b){ return (a.no||0) - (b.no||0); });
     var rows = sortedCrew.map(function(c){
       var cells = CREW_FIELDS.map(function(f){
-        return '<td><input type="text" class="cell-input" data-crew-id="'+c.id+'" data-field="'+f.key+'" value="'+escapeHtml(c[f.key] || '')+'"></td>';
+        return '<td><input type="'+f.type+'" class="cell-input" data-crew-id="'+c.id+'" data-field="'+f.key+'" value="'+escapeHtml(c[f.key] || '')+'"></td>';
       }).join('');
       return '<tr><td class="plain-td center">'+(c.no||'')+'</td>'+cells+
         '<td class="row-actions"><button class="icon-btn" data-del-crew="'+c.id+'">Remove</button></td></tr>';
