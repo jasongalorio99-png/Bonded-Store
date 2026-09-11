@@ -3579,7 +3579,7 @@ var qrcode = function() {
     return ''+
     slopchestHeader()+
     slopchestSubNav('sell')+
-    '<h2 class="page-title">Slopchest</h2>'+
+    '<h2 class="page-title">Sell</h2>'+
     '<p class="page-sub">'+todayStr()+' — pick the crew member, tap what they take, then complete the sale.</p>'+
     '<div class="sell-layout">'+
       '<div>'+
@@ -3865,6 +3865,10 @@ var qrcode = function() {
     return d.getDate()+'-'+months[d.getMonth()]+'-'+String(d.getFullYear()).slice(-2);
   }
 
+  function voucherHeader(){
+    return '<h1 class="slopchest-section-title">Internet Vouchers</h1>';
+  }
+
   function voucherSubNav(active){
     var tabs = [
       {id:'vouchers', label:'Vouchers'},
@@ -3873,6 +3877,10 @@ var qrcode = function() {
     return '<div class="subnav">'+tabs.map(function(t){
       return '<button data-tab="'+t.id+'"'+(active===t.id?' class="active"':'')+'>'+t.label+'</button>';
     }).join('')+'</div>';
+  }
+
+  function allotmentHeader(){
+    return '<h1 class="slopchest-section-title">Crew Allotments</h1>';
   }
 
   function allotmentSubNav(active){
@@ -3929,6 +3937,7 @@ var qrcode = function() {
     var tableHtml = '<div class="table-wrap editable-table-wrap"><table class="editable-table"><thead><tr><th class="plain-th">No.</th><th class="plain-th">Name</th>'+headerCells+'</tr></thead><tbody>'+bodyRows+'</tbody></table></div>';
 
     return ''+
+    allotmentHeader()+
     allotmentSubNav(activeTabId)+
     '<h2 class="page-title">Crew Allotments — '+kindLabel+'</h2>'+
     '<p class="page-sub">No. and Name sync automatically from the Crew tab, split by Filipino / Non-Filipino nationality. Add columns for whatever else you need to track, and edit those cells directly.</p>'+
@@ -3967,6 +3976,7 @@ var qrcode = function() {
     if(!state.crew.length) rows = '<tr><td colspan="4" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
 
     return ''+
+    voucherHeader()+
     voucherSubNav('vouchers')+
     '<h2 class="page-title">Internet vouchers</h2>'+
     '<p class="page-sub">Tap "+ Add" against a crew member to log a voucher handed out today. Vouchers Received tallies up automatically for '+periodLbl+'.</p>'+
@@ -4006,6 +4016,7 @@ var qrcode = function() {
     }).join('') : '<tr><td colspan="3" class="empty-note">No vouchers logged yet.</td></tr>';
 
     return ''+
+    voucherHeader()+
     voucherSubNav('vouchersLog')+
     '<h2 class="page-title">Voucher log</h2>'+
     '<p class="page-sub">Full history of every voucher logged to crew, across all months.</p>'+
