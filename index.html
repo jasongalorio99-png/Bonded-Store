@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -175,6 +175,13 @@
     font-size:30px;
     letter-spacing:2px;
     margin:0;
+    color:var(--ink);
+  }
+  .slopchest-section-title{
+    font-family:'Special Elite',monospace;
+    font-size:24px;
+    letter-spacing:1.5px;
+    margin:0 0 18px;
     color:var(--ink);
   }
   .subnav{
@@ -359,6 +366,7 @@
   }
   .item-tile .name{font-size:13.5px;font-weight:600;color:var(--ink-2);}
   .item-tile .price{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--grey);}
+  .item-tile-out{background:rgba(35,52,80,0.06);border-color:var(--ink-2);}
   .qty-row{display:flex;align-items:center;gap:8px;margin-top:2px;}
   .qty-btn{
     all:unset;
@@ -3441,6 +3449,10 @@ var qrcode = function() {
   var ICON_TICKET = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.2a1.6 1.6 0 0 0 0 3.1V15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.7a1.6 1.6 0 0 0 0-3.1V9Z"/><path d="M14 7.5v9"/></svg>';
   var ICON_TABLE = '<svg viewBox="0 0 24 24" fill="none" stroke="#2F6E5B" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17"/><path d="M3.5 14.5h17"/><path d="M9.5 4.5v15"/></svg>';
 
+  function slopchestHeader(){
+    return '<h1 class="slopchest-section-title">Slopchest</h1>';
+  }
+
   function slopchestSubNav(active){
     var tabs = [
       {id:'sell', label:'Sell'},
@@ -3476,6 +3488,7 @@ var qrcode = function() {
       ? '<select id="crewSelect" class="crew-select">'+crewOptions+'</select>'
       : '<div class="empty-note">No crew added yet. Go to the Crew tab to add names.</div>';
 
+    var sold = soldSinceCycleStart();
     var cats = {};
     state.catalog.forEach(function(it){
       cats[it.category] = cats[it.category] || [];
@@ -3485,8 +3498,10 @@ var qrcode = function() {
       var isOpen = state.sellCategoryOpen[cat] !== false; // default open
       var tiles = cats[cat].map(function(it){
         var qty = state.cart[it.id] || 0;
-        return '<div class="item-tile">'+
-          '<div class="name">'+escapeHtml(it.name)+'</div>'+
+        var remaining = (it.openingStock || 0) - (sold[it.id] || 0);
+        var isOut = remaining <= 0;
+        return '<div class="item-tile'+(isOut?' item-tile-out':'')+'">'+
+          '<div class="name">'+escapeHtml(it.name)+(isOut?' <span class="exp-tag stock-out-tag">Out of stock</span>':'')+'</div>'+
           '<div class="price">'+fmtMoney(it.price)+'</div>'+
           '<div class="qty-row">'+
             '<button class="qty-btn minus" data-minus="'+it.id+'">-</button>'+
@@ -3562,6 +3577,7 @@ var qrcode = function() {
     }
 
     return ''+
+    slopchestHeader()+
     slopchestSubNav('sell')+
     '<h2 class="page-title">Slopchest</h2>'+
     '<p class="page-sub">'+todayStr()+' — pick the crew member, tap what they take, then complete the sale.</p>'+
@@ -3745,6 +3761,7 @@ var qrcode = function() {
     }
 
     return ''+
+    slopchestHeader()+
     slopchestSubNav('items')+
     '<h2 class="page-title">Inventory</h2>'+
     '<p class="page-sub">Set the opening stock for the start of the period. Sold and remaining update automatically as sales come in from the Sell tab. Set an expiration date per item to get an alert once it\'s within 30 days of expiring.</p>'+
@@ -3821,6 +3838,7 @@ var qrcode = function() {
     }).join('') : '<tr><td colspan="4" class="empty-note">No declarations recorded this period.</td></tr>';
 
     return ''+
+    slopchestHeader()+
     slopchestSubNav('declare')+
     '<h2 class="page-title">Crew declaration</h2>'+
     '<p class="page-sub">Log cigarette items handed out to crew as a declared allowance. Only cigarette items appear here. These are kept on record but are not charged to the crew member and do not reduce inventory stock.</p>'+
@@ -4230,6 +4248,7 @@ var qrcode = function() {
     }
 
     return ''+
+    slopchestHeader()+
     slopchestSubNav('reports')+
     '<h2 class="page-title">Report</h2>'+
     '<p class="page-sub">Per-crew totals for payroll deduction, and Gratitudes kept separate since they aren\'t charged to anyone\'s pay. Pick a period, then print or hand this over to payroll.</p>'+
