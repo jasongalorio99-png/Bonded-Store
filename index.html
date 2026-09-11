@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -3505,9 +3505,8 @@ var qrcode = function() {
       return '<button class="chip-btn'+(state.gratitude.sponsor===opt?' active':'')+'" data-gratitude-sponsor="'+opt+'">'+opt+'</button>';
     }).join('');
     var gratitudeCardHtml = '<div class="card"><h3>Gratitudes</h3>'+
-      '<button class="btn btn-outline" id="gratitudeToggleBtn">Gratitudes</button>'+
-      (state.gratitudeOpen ? '<div class="gratitude-options">'+gratitudeChips+'</div>' : '')+
-      (state.gratitudeOpen && state.gratitude.sponsor ?
+      '<div class="gratitude-options">'+gratitudeChips+'</div>'+
+      (state.gratitude.sponsor ?
         '<div class="add-row" style="margin-top:12px;">'+
           '<input type="text" id="gratitudePort" placeholder="Port name" value="'+escapeHtml(state.gratitude.port)+'">'+
           '<input type="text" id="gratitudeForWhom" placeholder="For whom / purpose" value="'+escapeHtml(state.gratitude.forWhom)+'">'+
@@ -4024,9 +4023,11 @@ var qrcode = function() {
 
     var txnRows = txns.slice().reverse().map(function(t){
       var d = new Date(t.dateISO);
+      var txnMk = periodKeyForDate(d);
       return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(t.crewName)+'</td><td>'+t.items.length+'</td>'+
         '<td class="month-total">'+fmtMoney(t.total)+'</td>'+
-        '<td class="row-actions"><button class="icon-btn" data-view-receipt="'+t.id+'">Receipt</button></td></tr>';
+        '<td class="row-actions"><button class="icon-btn" data-view-receipt="'+t.id+'">Receipt</button>'+
+        '<button class="icon-btn" data-void="'+t.id+'" data-void-mk="'+txnMk+'">Void</button></td></tr>';
     }).join('');
     if(!txns.length) txnRows = '<tr><td colspan="5" class="empty-note">Nothing here yet.</td></tr>';
 
@@ -4121,11 +4122,6 @@ var qrcode = function() {
       }
       render();
     });
-    var gratitudeToggleBtn = document.getElementById('gratitudeToggleBtn');
-    if(gratitudeToggleBtn) gratitudeToggleBtn.addEventListener('click', function(){
-      state.gratitudeOpen = !state.gratitudeOpen;
-      render();
-    });
     main.querySelectorAll('[data-gratitude-sponsor]').forEach(function(el){
       el.addEventListener('click', function(){
         state.gratitude.sponsor = el.dataset.gratitudeSponsor;
@@ -4174,7 +4170,7 @@ var qrcode = function() {
     });
     main.querySelectorAll('[data-void]').forEach(function(el){
       el.addEventListener('click', function(){
-        voidTxn(el.dataset.void);
+        voidTxn(el.dataset.void, el.dataset.voidMk);
       });
     });
 
@@ -4584,9 +4580,10 @@ var qrcode = function() {
     showReceipt(txn);
   }
 
-  async function voidTxn(txnId){
+  async function voidTxn(txnId, mk){
     if(!confirm('Void this sale? This removes it from the record.')) return;
-    var mk = periodKeyForDate(new Date());
+    mk = mk || periodKeyForDate(new Date());
+    await ensureMonthLoaded(mk);
     state.monthTxns[mk] = (state.monthTxns[mk]||[]).filter(function(t){return t.id!==txnId;});
     await storageSet('txns:' + mk, state.monthTxns[mk]);
     render();
