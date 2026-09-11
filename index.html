@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -657,6 +657,8 @@
   }
   .grand-total-card .label{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#8E9AB3;}
   .grand-total-card .amt{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;}
+  .grand-total-card.gratitude-total{background:#B8842E;}
+  .grand-total-card.gratitude-total .label{color:rgba(255,255,255,0.85);}
 
   .receipt-overlay{
     position:fixed;inset:0;
@@ -3186,6 +3188,7 @@ var qrcode = function() {
     settings: {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null},
     cutoffEditMonth: monthKey(new Date()),
     customRange: {enabled: false, start: '', end: ''},
+    reportView: 'crew',
     sellCategoryOpen: {},
     viewMonth: monthKey(new Date()),
     lastReceipt: null
@@ -3993,6 +3996,17 @@ var qrcode = function() {
     '</div>';
   }
 
+  function reportsSubNav(active){
+    var tabs = [
+      {id:'crew', label:'Crew Deductions'},
+      {id:'gratitude', label:'Gratitudes'},
+      {id:'combined', label:'Combined'}
+    ];
+    return '<div class="subnav">'+tabs.map(function(t){
+      return '<button data-report-view="'+t.id+'"'+(active===t.id?' class="active"':'')+'>'+t.label+'</button>';
+    }).join('')+'</div>';
+  }
+
   function renderReports(){
     var mk = state.viewMonth;
     var rangeInvalid = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && state.customRange.start > state.customRange.end);
@@ -4000,39 +4014,47 @@ var qrcode = function() {
     var txns = usingCustom ? txnsForCustomRange(state.customRange.start, state.customRange.end) : (state.monthTxns[mk] || []);
     var periodTitle = usingCustom ? formatDateRangeLabel(state.customRange.start, state.customRange.end) : periodLabel(mk);
 
+    // Always show the CURRENT crew-list name, not whatever was snapshotted on the receipt at sale time.
+    function resolveDisplayName(t){
+      if(t.isGratitude) return t.crewName;
+      var c = state.crew.find(function(x){ return x.id === t.crewId; });
+      return c ? (c.name || t.crewName) : t.crewName;
+    }
+
     var crewTxns = txns.filter(function(t){ return !t.isGratitude; });
     var gratitudeTxns = txns.filter(function(t){ return !!t.isGratitude; });
 
     function buildSummary(list){
       var by = {};
       list.forEach(function(t){
-        by[t.crewId] = by[t.crewId] || {name:t.crewName, total:0, count:0};
+        by[t.crewId] = by[t.crewId] || {name: resolveDisplayName(t), total:0, count:0};
         by[t.crewId].total += t.total;
         by[t.crewId].count += 1;
       });
       return by;
     }
-    function summaryRows(by){
+    function summaryRows(by, cols){
       var ids = Object.keys(by).sort(function(a,b){ return by[b].total - by[a].total; });
       var rows = ids.map(function(id){
         var c = by[id];
         return '<tr><td>'+escapeHtml(c.name)+'</td><td>'+c.count+'</td><td class="month-total">'+fmtMoney(c.total)+'</td></tr>';
       }).join('');
-      return rows || '<tr><td colspan="3" class="empty-note">No sales recorded for this period.</td></tr>';
+      return rows || '<tr><td colspan="'+cols+'" class="empty-note">No sales recorded for this period.</td></tr>';
     }
     var byCrewSummary = buildSummary(crewTxns);
     var byGratitudeSummary = buildSummary(gratitudeTxns);
-    var crewRows = summaryRows(byCrewSummary);
-    var gratitudeRows = summaryRows(byGratitudeSummary);
+    var crewRows = summaryRows(byCrewSummary, 3);
+    var gratitudeRows = summaryRows(byGratitudeSummary, 3);
 
     var grandCrew = crewTxns.reduce(function(s,t){return s+t.total;},0);
     var grandGratitude = gratitudeTxns.reduce(function(s,t){return s+t.total;},0);
+    var grandCombined = grandCrew + grandGratitude;
 
-    // Itemized breakdown: for each crew/gratitude, purchases grouped by the date they happened.
-    function buildStatements(list){
+    // Crew: itemized breakdown grouped by the date the purchase happened.
+    function buildCrewStatements(list){
       var byId = {};
       list.forEach(function(t){
-        byId[t.crewId] = byId[t.crewId] || {name:t.crewName, total:0, byDate:{}};
+        byId[t.crewId] = byId[t.crewId] || {name: resolveDisplayName(t), total:0, byDate:{}};
         var entry = byId[t.crewId];
         entry.total += t.total;
         var d = new Date(t.dateISO);
@@ -4048,7 +4070,7 @@ var qrcode = function() {
       });
       return byId;
     }
-    function statementsHtml(byId){
+    function crewStatementsHtml(byId){
       var ids = Object.keys(byId).sort(function(a,b){ return byId[b].total - byId[a].total; });
       if(!ids.length) return '<div class="empty-note">No sales recorded for this period.</div>';
       return ids.map(function(id){
@@ -4074,13 +4096,63 @@ var qrcode = function() {
         '</div>';
       }).join('');
     }
-    var crewStatementsHtml = statementsHtml(buildStatements(crewTxns));
-    var gratitudeStatementsHtml = statementsHtml(buildStatements(gratitudeTxns));
+
+    // Gratitudes: itemized breakdown grouped by Port, then by the individual gratitude issued at that port.
+    function buildGratitudePorts(list){
+      var byPort = {};
+      list.forEach(function(t){
+        var port = (t.gratitudePort || '').trim() || 'No port specified';
+        byPort[port] = byPort[port] || {total:0, entries:[]};
+        byPort[port].total += t.total;
+        var d = new Date(t.dateISO);
+        var itemRows = t.items.map(function(i){
+          return {name:i.name, qty:i.qty, amount:i.price*i.qty};
+        });
+        byPort[port].entries.push({
+          id: t.id,
+          sponsor: t.gratitudeSponsor || '',
+          forWhom: t.gratitudeForWhom || '',
+          displayDate: d.toLocaleDateString(),
+          dateISO: t.dateISO,
+          items: itemRows,
+          total: t.total
+        });
+      });
+      return byPort;
+    }
+    function gratitudeStatementsHtml(byPort){
+      var ports = Object.keys(byPort).sort(function(a,b){ return byPort[b].total - byPort[a].total; });
+      if(!ports.length) return '<div class="empty-note">No Gratitudes recorded for this period.</div>';
+      return ports.map(function(port){
+        var p = byPort[port];
+        var entries = p.entries.slice().sort(function(a,b){ return new Date(a.dateISO) - new Date(b.dateISO); });
+        var entryHtml = entries.map(function(e){
+          var itemRows = e.items.map(function(it){
+            return '<tr><td>'+escapeHtml(it.name)+'</td><td>'+it.qty+'</td><td class="month-total">'+fmtMoney(it.amount)+'</td></tr>';
+          }).join('');
+          var subLabel = e.displayDate + (e.sponsor ? ' &middot; ' + escapeHtml(e.sponsor) : '') + (e.forWhom ? ' &middot; For: ' + escapeHtml(e.forWhom) : '');
+          return '<div class="statement-date-group">'+
+            '<div class="statement-date-label">'+subLabel+'</div>'+
+            '<div class="table-wrap"><table class="plain"><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>'+itemRows+'</tbody></table></div>'+
+            '<div class="statement-date-subtotal"><span>Subtotal</span><span>'+fmtMoney(e.total)+'</span></div>'+
+          '</div>';
+        }).join('');
+        return '<div class="crew-statement" data-crew-statement="grat-port-'+encodeURIComponent(port)+'">'+
+          '<div class="crew-statement-head"><h4>Port: '+escapeHtml(port)+'</h4>'+
+            '<button class="icon-btn no-print" data-print-crew="grat-port-'+encodeURIComponent(port)+'">Print this statement</button></div>'+
+          entryHtml+
+          '<div class="crew-statement-total"><span>Subtotal — '+escapeHtml(port)+'</span><span>'+fmtMoney(p.total)+'</span></div>'+
+        '</div>';
+      }).join('');
+    }
+
+    var crewStatementsRendered = crewStatementsHtml(buildCrewStatements(crewTxns));
+    var gratitudePortsRendered = gratitudeStatementsHtml(buildGratitudePorts(gratitudeTxns));
 
     var txnRows = txns.slice().reverse().map(function(t){
       var d = new Date(t.dateISO);
       var txnMk = periodKeyForDate(d);
-      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(t.crewName)+(t.isGratitude?' <span class="exp-tag stock-out-tag" style="margin-left:6px;">Gratitude</span>':'')+'</td><td>'+t.items.length+'</td>'+
+      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(resolveDisplayName(t))+(t.isGratitude?' <span class="exp-tag stock-out-tag" style="margin-left:6px;">Gratitude</span>':'')+'</td><td>'+t.items.length+'</td>'+
         '<td class="month-total">'+fmtMoney(t.total)+'</td>'+
         '<td class="row-actions"><button class="icon-btn" data-view-receipt="'+t.id+'">Receipt</button>'+
         '<button class="icon-btn" data-void="'+t.id+'" data-void-mk="'+txnMk+'">Void</button></td></tr>';
@@ -4104,6 +4176,58 @@ var qrcode = function() {
     var hasOverride = state.settings.periodCutoffs && state.settings.periodCutoffs[state.cutoffEditMonth] != null;
     var effectiveCutoff = getCutoffForMonth(state.cutoffEditMonth);
     var defaultCutoff = state.settings.defaultCutoffDay || 1;
+
+    var view = state.reportView || 'crew';
+    var viewContentHtml;
+    if(view === 'gratitude'){
+      viewContentHtml = ''+
+        '<div class="grand-total-card gratitude-total"><span class="label">Gratitudes given (not deducted) — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandGratitude)+'</span></div>'+
+        '<div class="card" id="reportPrintArea">'+
+          '<div id="crewSummaryTable">'+
+            '<h3 class="report-section-title">Gratitudes by sponsor / recipient</h3>'+
+            '<div class="table-wrap"><table class="plain"><thead><tr><th>Sponsor / recipient</th><th>Given</th><th>Amount</th></tr></thead><tbody>'+gratitudeRows+'</tbody></table></div>'+
+          '</div>'+
+          '<div class="itemized-breakdown" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);">'+
+            '<h3 class="report-section-title">Itemized Gratitudes by port — '+periodTitle+'</h3>'+
+            gratitudePortsRendered+
+          '</div>'+
+        '</div>';
+    } else if(view === 'combined'){
+      var combinedRows = [];
+      Object.keys(byCrewSummary).forEach(function(id){
+        combinedRows.push({name: byCrewSummary[id].name, type:'Crew', total: byCrewSummary[id].total});
+      });
+      Object.keys(byGratitudeSummary).forEach(function(id){
+        combinedRows.push({name: byGratitudeSummary[id].name, type:'Gratitude', total: byGratitudeSummary[id].total});
+      });
+      combinedRows.sort(function(a,b){ return b.total - a.total; });
+      var combinedHtml = combinedRows.length ? combinedRows.map(function(r){
+        return '<tr><td>'+escapeHtml(r.name)+'</td><td>'+r.type+'</td><td class="month-total">'+fmtMoney(r.total)+'</td></tr>';
+      }).join('') : '<tr><td colspan="3" class="empty-note">Nothing recorded for this period.</td></tr>';
+      viewContentHtml = ''+
+        '<div class="grand-total-card"><span class="label">Combined total — crew + Gratitudes — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandCombined)+'</span></div>'+
+        '<div class="card" style="display:flex;gap:14px;flex-wrap:wrap;">'+
+          '<div style="flex:1;min-width:180px;"><div class="settings-note" style="margin:0 0 4px;">Crew deductions</div><div style="font-family:\'IBM Plex Mono\',monospace;font-size:18px;font-weight:700;color:var(--ink);">'+fmtMoney(grandCrew)+'</div></div>'+
+          '<div style="flex:1;min-width:180px;"><div class="settings-note" style="margin:0 0 4px;">Gratitudes</div><div style="font-family:\'IBM Plex Mono\',monospace;font-size:18px;font-weight:700;color:#B8842E;">'+fmtMoney(grandGratitude)+'</div></div>'+
+        '</div>'+
+        '<div class="card">'+
+          '<h3 class="report-section-title">Everyone — crew and Gratitudes combined</h3>'+
+          '<div class="table-wrap"><table class="plain"><thead><tr><th>Name</th><th>Type</th><th>Amount</th></tr></thead><tbody>'+combinedHtml+'</tbody></table></div>'+
+        '</div>';
+    } else {
+      viewContentHtml = ''+
+        '<div class="grand-total-card"><span class="label">Total to deduct from crew — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandCrew)+'</span></div>'+
+        '<div class="card" id="reportPrintArea">'+
+          '<div id="crewSummaryTable">'+
+            '<h3 class="report-section-title">Deduction by crew member</h3>'+
+            '<div class="table-wrap"><table class="plain"><thead><tr><th>Crew</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>'+crewRows+'</tbody></table></div>'+
+          '</div>'+
+          '<div class="itemized-breakdown" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);">'+
+            '<h3 class="report-section-title">Itemized purchases by crew — '+periodTitle+'</h3>'+
+            crewStatementsRendered+
+          '</div>'+
+        '</div>';
+    }
 
     return ''+
     slopchestSubNav('reports')+
@@ -4145,24 +4269,8 @@ var qrcode = function() {
         (rangeInvalid ? '<p class="settings-note" style="color:#B3261E;">End date must be on or after the start date.</p>' : '')
       ) : '')+
     '</div>'+
-    '<div class="grand-total-card"><span class="label">Total to deduct from crew — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandCrew)+'</span></div>'+
-    (grandGratitude ? '<div class="grand-total-card" style="background:var(--paper-2);color:var(--ink);border:1px solid var(--line);"><span class="label">Gratitudes given (not deducted) — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandGratitude)+'</span></div>' : '')+
-    '<div class="card" id="reportPrintArea">'+
-      '<div id="crewSummaryTable">'+
-        '<h3 class="report-section-title">Deduction by crew member</h3>'+
-        '<div class="table-wrap"><table class="plain"><thead><tr><th>Crew</th><th>Purchases</th><th>Amount</th></tr></thead><tbody>'+crewRows+'</tbody></table></div>'+
-        '<h3 class="report-section-title" style="margin-top:22px;">Gratitudes</h3>'+
-        '<div class="table-wrap"><table class="plain"><thead><tr><th>Sponsor / recipient</th><th>Given</th><th>Amount</th></tr></thead><tbody>'+gratitudeRows+'</tbody></table></div>'+
-      '</div>'+
-      '<div class="itemized-breakdown" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);">'+
-        '<h3 class="report-section-title">Itemized purchases by crew — '+periodTitle+'</h3>'+
-        crewStatementsHtml+
-      '</div>'+
-      '<div class="itemized-breakdown" style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);">'+
-        '<h3 class="report-section-title">Itemized Gratitudes — '+periodTitle+'</h3>'+
-        gratitudeStatementsHtml+
-      '</div>'+
-    '</div>'+
+    reportsSubNav(view)+
+    viewContentHtml+
     '<div class="card">'+
       '<h3>All transactions — '+periodTitle+'</h3>'+
       '<div class="table-wrap"><table class="plain"><thead><tr><th>Date</th><th>Crew</th><th>Items</th><th>Total</th><th></th></tr></thead><tbody>'+txnRows+'</tbody></table></div>'+
@@ -4174,6 +4282,12 @@ var qrcode = function() {
 
     main.querySelectorAll('[data-tab]').forEach(function(el){
       el.addEventListener('click', function(){ switchTab(el.dataset.tab); });
+    });
+    main.querySelectorAll('[data-report-view]').forEach(function(el){
+      el.addEventListener('click', function(){
+        state.reportView = el.dataset.reportView;
+        render();
+      });
     });
 
     var crewSelect = document.getElementById('crewSelect');
@@ -4389,22 +4503,28 @@ var qrcode = function() {
     var txns = usingCustom ? txnsForCustomRange(state.customRange.start, state.customRange.end) : (state.monthTxns[mk] || []);
     var periodTitle = usingCustom ? formatDateRangeLabel(state.customRange.start, state.customRange.end) : periodLabel(mk);
 
+    function resolveDisplayName(t){
+      if(t.isGratitude) return t.crewName;
+      var c = state.crew.find(function(x){ return x.id === t.crewId; });
+      return c ? (c.name || t.crewName) : t.crewName;
+    }
+
     var crewTxns = txns.filter(function(t){ return !t.isGratitude; });
     var gratitudeTxns = txns.filter(function(t){ return !!t.isGratitude; });
 
     function summaryOf(list){
       var by = {};
       list.forEach(function(t){
-        by[t.crewId] = by[t.crewId] || {name:t.crewName, total:0, count:0};
+        by[t.crewId] = by[t.crewId] || {name: resolveDisplayName(t), total:0, count:0};
         by[t.crewId].total += t.total;
         by[t.crewId].count += 1;
       });
       return by;
     }
-    function statementsOf(list){
+    function crewStatementsOf(list){
       var byId = {};
       list.forEach(function(t){
-        byId[t.crewId] = byId[t.crewId] || {name:t.crewName, total:0, byDate:{}};
+        byId[t.crewId] = byId[t.crewId] || {name: resolveDisplayName(t), total:0, byDate:{}};
         var entry = byId[t.crewId];
         entry.total += t.total;
         var d = new Date(t.dateISO);
@@ -4419,6 +4539,24 @@ var qrcode = function() {
         });
       });
       return byId;
+    }
+    function gratitudePortsOf(list){
+      var byPort = {};
+      list.forEach(function(t){
+        var port = (t.gratitudePort || '').trim() || 'No port specified';
+        byPort[port] = byPort[port] || {total:0, entries:[]};
+        byPort[port].total += t.total;
+        var d = new Date(t.dateISO);
+        byPort[port].entries.push({
+          sponsor: t.gratitudeSponsor || '',
+          forWhom: t.gratitudeForWhom || '',
+          displayDate: d.toLocaleDateString(),
+          dateISO: t.dateISO,
+          items: t.items.map(function(i){ return {name:i.name, qty:i.qty, amount:i.price*i.qty}; }),
+          total: t.total
+        });
+      });
+      return byPort;
     }
 
     var byCrew = summaryOf(crewTxns);
@@ -4447,8 +4585,10 @@ var qrcode = function() {
     });
     rows.push(['', 'Grand total (Gratitudes)', grandGratitude.toFixed(2)]);
     rows.push([]);
+    rows.push(['Combined total (crew + Gratitudes)', '', (grandCrew + grandGratitude).toFixed(2)]);
+    rows.push([]);
     rows.push(['Itemized purchases by crew — grouped by date']);
-    var byCrewItems = statementsOf(crewTxns);
+    var byCrewItems = crewStatementsOf(crewTxns);
     Object.keys(byCrewItems).sort(function(a,b){return byCrewItems[b].total-byCrewItems[a].total;}).forEach(function(id){
       var c = byCrewItems[id];
       rows.push([]);
@@ -4466,23 +4606,21 @@ var qrcode = function() {
       rows.push(['Subtotal — ' + c.name, '', c.total.toFixed(2)]);
     });
     rows.push([]);
-    rows.push(['Itemized Gratitudes — grouped by date']);
-    var byGratitudeItems = statementsOf(gratitudeTxns);
-    Object.keys(byGratitudeItems).sort(function(a,b){return byGratitudeItems[b].total-byGratitudeItems[a].total;}).forEach(function(id){
-      var c = byGratitudeItems[id];
+    rows.push(['Itemized Gratitudes — grouped by port']);
+    var byPort = gratitudePortsOf(gratitudeTxns);
+    Object.keys(byPort).sort(function(a,b){return byPort[b].total-byPort[a].total;}).forEach(function(port){
+      var p = byPort[port];
       rows.push([]);
-      rows.push([c.name]);
-      Object.keys(c.byDate).sort().forEach(function(dk){
-        var day = c.byDate[dk];
-        rows.push([day.displayDate]);
+      rows.push(['Port: ' + port]);
+      p.entries.slice().sort(function(a,b){return new Date(a.dateISO)-new Date(b.dateISO);}).forEach(function(e){
+        rows.push([e.displayDate, e.sponsor, e.forWhom ? ('For: ' + e.forWhom) : '']);
         rows.push(['Item', 'Qty', 'Amount']);
-        Object.keys(day.items).forEach(function(iid){
-          var it = day.items[iid];
+        e.items.forEach(function(it){
           rows.push([it.name, it.qty, it.amount.toFixed(2)]);
         });
-        rows.push(['Subtotal — ' + day.displayDate, '', day.subtotal.toFixed(2)]);
+        rows.push(['Subtotal', '', e.total.toFixed(2)]);
       });
-      rows.push(['Subtotal — ' + c.name, '', c.total.toFixed(2)]);
+      rows.push(['Subtotal — Port: ' + port, '', p.total.toFixed(2)]);
     });
 
     var csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
