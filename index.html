@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Bonded Store Ledger</title>
+<title>Chit</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#16233A">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Bonded Store">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Chit">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -63,20 +63,41 @@
     margin-bottom:14px;
   }
   .brand .stamp-mark{
-    display:inline-block;
-    font-family:'Special Elite',monospace;
-    font-size:13px;
-    letter-spacing:1px;
-    border:2px solid #D9CFAE;
-    color:#D9CFAE;
-    padding:5px 9px;
-    transform:rotate(-3deg);
-    border-radius:3px;
-    background:transparent;
+    all:unset;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
     cursor:pointer;
   }
-  .brand .stamp-mark:hover{background:rgba(217,207,174,0.12);}
-  .brand .stamp-mark:active{transform:rotate(-3deg) scale(0.96);}
+  .brand .crest-ring{
+    width:44px;
+    height:44px;
+    border-radius:50%;
+    border:2px dashed #D9CFAE;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transform:rotate(-3deg);
+  }
+  .brand .crest-disc{
+    width:32px;
+    height:32px;
+    border-radius:50%;
+    background:var(--stamp);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .brand .stamp-word{
+    font-family:'Special Elite',monospace;
+    font-size:15px;
+    letter-spacing:3px;
+    color:#D9CFAE;
+  }
+  .brand .stamp-mark:hover .crest-ring{border-color:#fff;}
+  .brand .stamp-mark:active .crest-ring{transform:rotate(-3deg) scale(0.94);}
   .brand .brand-officer{
     display:block;
     font-family:'IBM Plex Mono',monospace;
@@ -812,7 +833,19 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <button type="button" class="stamp-mark" id="brandHomeBtn">BONDED</button>
+      <button type="button" class="stamp-mark" id="brandHomeBtn">
+        <span class="crest-ring">
+          <span class="crest-disc">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#F1E9D8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="5" r="2.1"/>
+              <path d="M12 7.1V19"/>
+              <path d="M8 11h8"/>
+              <path d="M5 14c0 3.5 3 6 7 6s7-2.5 7-6"/>
+            </svg>
+          </span>
+        </span>
+        <span class="stamp-word">CHIT</span>
+      </button>
       <span class="brand-officer">3/O Jason Galorio</span>
     </div>
   </aside>
@@ -4121,7 +4154,7 @@ var qrcode = function() {
           '<div class="crew-statement-head"><h4>'+escapeHtml(c.name)+'</h4>'+
             '<button class="icon-btn no-print" data-print-crew="'+id+'">Print this statement</button></div>'+
           dateSections+
-          '<div class="crew-statement-total"><span>Subtotal — '+escapeHtml(c.name)+'</span><span>'+fmtMoney(c.total)+'</span></div>'+
+          '<div class="crew-statement-total"><span>Total — '+escapeHtml(c.name)+'</span><span>'+fmtMoney(c.total)+'</span></div>'+
         '</div>';
       }).join('');
     }
@@ -4170,7 +4203,7 @@ var qrcode = function() {
           '<div class="crew-statement-head"><h4>Port: '+escapeHtml(port)+'</h4>'+
             '<button class="icon-btn no-print" data-print-crew="grat-port-'+encodeURIComponent(port)+'">Print this statement</button></div>'+
           entryHtml+
-          '<div class="crew-statement-total"><span>Subtotal — '+escapeHtml(port)+'</span><span>'+fmtMoney(p.total)+'</span></div>'+
+          '<div class="crew-statement-total"><span>Total — '+escapeHtml(port)+'</span><span>'+fmtMoney(p.total)+'</span></div>'+
         '</div>';
       }).join('');
     }
@@ -4211,6 +4244,9 @@ var qrcode = function() {
     if(view === 'gratitude'){
       viewContentHtml = ''+
         '<div class="grand-total-card gratitude-total"><span class="label">Gratitudes given (not deducted) — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandGratitude)+'</span></div>'+
+        '<div class="card" style="display:flex;justify-content:flex-end;">'+
+          '<button class="btn btn-outline" id="exportGratitudeWordBtn">Export Gratitudes as Word</button>'+
+        '</div>'+
         '<div class="card" id="reportPrintArea">'+
           '<div id="crewSummaryTable">'+
             '<h3 class="report-section-title">Gratitudes by sponsor / recipient</h3>'+
@@ -4477,7 +4513,9 @@ var qrcode = function() {
       render();
     });
     var exportReportBtn = document.getElementById('exportReportBtn');
-    if(exportReportBtn) exportReportBtn.addEventListener('click', function(){ exportReportCSV(); });
+    if(exportReportBtn) exportReportBtn.addEventListener('click', function(){ exportReportXLSX(); });
+    var exportGratitudeWordBtn = document.getElementById('exportGratitudeWordBtn');
+    if(exportGratitudeWordBtn) exportGratitudeWordBtn.addEventListener('click', function(){ exportGratitudesWord(); });
     main.querySelectorAll('[data-print-crew]').forEach(function(el){
       el.addEventListener('click', function(){ printSingleCrewStatement(el.dataset.printCrew); });
     });
@@ -4520,13 +4558,138 @@ var qrcode = function() {
     });
   }
 
-  function csvEscape(v){
-    v = (v === null || v === undefined) ? '' : String(v);
-    if(/[",\r\n]/.test(v)) return '"' + v.replace(/"/g,'""') + '"';
-    return v;
+  var _xlsxLibPromise = null;
+  function loadXLSXLib(){
+    if(window.XLSX) return Promise.resolve(window.XLSX);
+    if(_xlsxLibPromise) return _xlsxLibPromise;
+    _xlsxLibPromise = new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = function(){ resolve(window.XLSX); };
+      s.onerror = function(){ _xlsxLibPromise = null; reject(new Error('Could not load the Excel export library. Check your internet connection and try again.')); };
+      document.head.appendChild(s);
+    });
+    return _xlsxLibPromise;
   }
 
-  function exportReportCSV(){
+  var _htmlDocxLibPromise = null;
+  function loadHtmlDocxLib(){
+    if(window.htmlDocx) return Promise.resolve(window.htmlDocx);
+    if(_htmlDocxLibPromise) return _htmlDocxLibPromise;
+    _htmlDocxLibPromise = new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js';
+      s.onload = function(){ resolve(window.htmlDocx); };
+      s.onerror = function(){ _htmlDocxLibPromise = null; reject(new Error('Could not load the Word export library. Check your internet connection and try again.')); };
+      document.head.appendChild(s);
+    });
+    return _htmlDocxLibPromise;
+  }
+
+  async function exportGratitudesWord(){
+    var mk = state.viewMonth;
+    var rangeInvalid = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && state.customRange.start > state.customRange.end);
+    var usingCustom = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && !rangeInvalid);
+    var txns = usingCustom ? txnsForCustomRange(state.customRange.start, state.customRange.end) : (state.monthTxns[mk] || []);
+    var periodTitle = usingCustom ? formatDateRangeLabel(state.customRange.start, state.customRange.end) : periodLabel(mk);
+
+    var gratitudeTxns = txns.filter(function(t){ return !!t.isGratitude; });
+
+    var summary = {};
+    gratitudeTxns.forEach(function(t){
+      summary[t.crewId] = summary[t.crewId] || {name:t.crewName, total:0, count:0};
+      summary[t.crewId].total += t.total;
+      summary[t.crewId].count += 1;
+    });
+    var grandGratitude = gratitudeTxns.reduce(function(s,t){return s+t.total;},0);
+
+    var byPort = {};
+    gratitudeTxns.forEach(function(t){
+      var port = (t.gratitudePort || '').trim() || 'No port specified';
+      byPort[port] = byPort[port] || {total:0, entries:[]};
+      byPort[port].total += t.total;
+      var d = new Date(t.dateISO);
+      byPort[port].entries.push({
+        sponsor: t.gratitudeSponsor || '',
+        forWhom: t.gratitudeForWhom || '',
+        displayDate: d.toLocaleDateString(),
+        dateISO: t.dateISO,
+        items: t.items.map(function(i){ return {name:i.name, qty:i.qty, amount:i.price*i.qty}; }),
+        total: t.total
+      });
+    });
+
+    function esc(v){
+      return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    var summaryRowsHtml = Object.keys(summary).sort(function(a,b){return summary[b].total-summary[a].total;}).map(function(id){
+      var c = summary[id];
+      return '<tr><td>'+esc(c.name)+'</td><td>'+c.count+'</td><td>'+fmtMoney(c.total)+'</td></tr>';
+    }).join('');
+    if(!summaryRowsHtml) summaryRowsHtml = '<tr><td colspan="3">No Gratitudes recorded for this period.</td></tr>';
+
+    var portsHtml = Object.keys(byPort).sort(function(a,b){return byPort[b].total-byPort[a].total;}).map(function(port){
+      var p = byPort[port];
+      var entries = p.entries.slice().sort(function(a,b){return new Date(a.dateISO)-new Date(b.dateISO);});
+      var entriesHtml = entries.map(function(e){
+        var itemRows = e.items.map(function(it){
+          return '<tr><td>'+esc(it.name)+'</td><td>'+it.qty+'</td><td>'+fmtMoney(it.amount)+'</td></tr>';
+        }).join('');
+        var subLabel = e.displayDate + (e.sponsor ? ' &middot; ' + esc(e.sponsor) : '') + (e.forWhom ? ' &middot; For: ' + esc(e.forWhom) : '');
+        return '<p class="entry-label"><b>'+subLabel+'</b></p>'+
+          '<table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>'+itemRows+
+          '<tr class="total-row"><td colspan="2">Subtotal</td><td>'+fmtMoney(e.total)+'</td></tr></tbody></table>';
+      }).join('');
+      return '<h2>Port: '+esc(port)+'</h2>'+entriesHtml+
+        '<p class="port-total"><b>Total — '+esc(port)+': '+fmtMoney(p.total)+'</b></p>';
+    }).join('') || '<p>No Gratitudes recorded for this period.</p>';
+
+    var html = ''+
+    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Gratitudes Report</title><style>'+
+    'body{font-family:Calibri,Arial,sans-serif;color:#16233A;}'+
+    'h1{font-size:20pt;margin-bottom:2pt;}'+
+    'h2{font-size:13pt;margin-top:18pt;margin-bottom:4pt;}'+
+    'p{font-size:10.5pt;}'+
+    '.entry-label{margin:10pt 0 2pt;}'+
+    '.port-total{margin-top:4pt;}'+
+    'table{border-collapse:collapse;width:100%;margin-bottom:6pt;}'+
+    'th,td{border:1px solid #999;padding:4pt 6pt;font-size:10pt;text-align:left;}'+
+    'th{background:#F0E9D8;}'+
+    '.total-row td{font-weight:bold;background:#F7F2E4;}'+
+    '</style></head><body>'+
+    '<h1>Gratitudes Report</h1>'+
+    '<p><b>Period:</b> '+esc(periodTitle)+'</p>'+
+    '<p><b>Total Gratitudes given (not deducted):</b> '+fmtMoney(grandGratitude)+'</p>'+
+    '<h2>Summary by sponsor / recipient</h2>'+
+    '<table><thead><tr><th>Sponsor / recipient</th><th>Given</th><th>Amount</th></tr></thead><tbody>'+summaryRowsHtml+'</tbody></table>'+
+    '<h2 style="margin-top:22pt;">Itemized by port</h2>'+
+    portsHtml+
+    '</body></html>';
+
+    var filename = 'gratitudes-report-' + (usingCustom ? (state.customRange.start+'_to_'+state.customRange.end) : mk) + '.docx';
+    var btn = document.getElementById('exportGratitudeWordBtn');
+    var originalLabel = btn ? btn.textContent : '';
+    if(btn){ btn.disabled = true; btn.textContent = 'Preparing file…'; }
+    try{
+      var htmlDocx = await loadHtmlDocxLib();
+      var blob = htmlDocx.asBlob(html);
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    }catch(err){
+      alert(err.message || 'Could not export the Gratitudes report. Please try again.');
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
+    }
+  }
+
+  async function exportReportXLSX(){
     var mk = state.viewMonth;
     var rangeInvalid = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && state.customRange.start > state.customRange.end);
     var usingCustom = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && !rangeInvalid);
@@ -4633,7 +4796,7 @@ var qrcode = function() {
         });
         rows.push(['Subtotal — ' + day.displayDate, '', day.subtotal.toFixed(2)]);
       });
-      rows.push(['Subtotal — ' + c.name, '', c.total.toFixed(2)]);
+      rows.push(['Total — ' + c.name, '', c.total.toFixed(2)]);
     });
     rows.push([]);
     rows.push(['Itemized Gratitudes — grouped by port']);
@@ -4650,19 +4813,25 @@ var qrcode = function() {
         });
         rows.push(['Subtotal', '', e.total.toFixed(2)]);
       });
-      rows.push(['Subtotal — Port: ' + port, '', p.total.toFixed(2)]);
+      rows.push(['Total — Port: ' + port, '', p.total.toFixed(2)]);
     });
 
-    var csv = rows.map(function(r){ return r.map(csvEscape).join(','); }).join('\r\n');
-    var blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'bonded-store-report-' + (usingCustom ? (state.customRange.start+'_to_'+state.customRange.end) : mk) + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    var filename = 'bonded-store-report-' + (usingCustom ? (state.customRange.start+'_to_'+state.customRange.end) : mk) + '.xlsx';
+    var btn = document.getElementById('exportReportBtn');
+    var originalLabel = btn ? btn.textContent : '';
+    if(btn){ btn.disabled = true; btn.textContent = 'Preparing file…'; }
+    try{
+      var XLSX = await loadXLSXLib();
+      var ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{wch:32},{wch:20},{wch:16}];
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Report');
+      XLSX.writeFile(wb, filename);
+    }catch(err){
+      alert(err.message || 'Could not export the report. Please try again.');
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
+    }
   }
 
   function printSingleCrewStatement(crewId){
