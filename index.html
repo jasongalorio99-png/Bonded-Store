@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -4282,6 +4282,9 @@ var qrcode = function() {
     } else {
       viewContentHtml = ''+
         '<div class="grand-total-card"><span class="label">Total to deduct from crew — '+periodTitle+'</span><span class="amt">'+fmtMoney(grandCrew)+'</span></div>'+
+        '<div class="card" style="display:flex;justify-content:flex-end;">'+
+          '<button class="btn btn-outline" id="printAllStatementsBtn">Print all statements (1 PDF per crew)</button>'+
+        '</div>'+
         '<div class="card" id="reportPrintArea">'+
           '<div id="crewSummaryTable">'+
             '<h3 class="report-section-title">Deduction by crew member</h3>'+
@@ -4516,6 +4519,8 @@ var qrcode = function() {
     if(exportReportBtn) exportReportBtn.addEventListener('click', function(){ exportReportXLSX(); });
     var exportGratitudeWordBtn = document.getElementById('exportGratitudeWordBtn');
     if(exportGratitudeWordBtn) exportGratitudeWordBtn.addEventListener('click', function(){ exportGratitudesWord(); });
+    var printAllStatementsBtn = document.getElementById('printAllStatementsBtn');
+    if(printAllStatementsBtn) printAllStatementsBtn.addEventListener('click', function(){ printAllCrewStatements(); });
     main.querySelectorAll('[data-print-crew]').forEach(function(el){
       el.addEventListener('click', function(){ printSingleCrewStatement(el.dataset.printCrew); });
     });
@@ -4558,6 +4563,16 @@ var qrcode = function() {
     });
   }
 
+  function loadScript(src){
+    return new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = function(){ resolve(); };
+      s.onerror = function(){ reject(new Error('Failed to load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
   var _xlsxLibPromise = null;
   function loadXLSXLib(){
     if(window.XLSX) return Promise.resolve(window.XLSX);
@@ -4584,6 +4599,141 @@ var qrcode = function() {
       document.head.appendChild(s);
     });
     return _htmlDocxLibPromise;
+  }
+
+  var _pdfLibsPromise = null;
+  function loadPdfLibs(){
+    if(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable) return Promise.resolve();
+    if(_pdfLibsPromise) return _pdfLibsPromise;
+    _pdfLibsPromise = loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      .then(function(){ return loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'); })
+      .catch(function(){ _pdfLibsPromise = null; throw new Error('Could not load the PDF export library. Check your internet connection and try again.'); });
+    return _pdfLibsPromise;
+  }
+
+  var _jsZipLibPromise = null;
+  function loadJSZipLib(){
+    if(window.JSZip) return Promise.resolve(window.JSZip);
+    if(_jsZipLibPromise) return _jsZipLibPromise;
+    _jsZipLibPromise = loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js')
+      .then(function(){ return window.JSZip; })
+      .catch(function(){ _jsZipLibPromise = null; throw new Error('Could not load the ZIP library. Check your internet connection and try again.'); });
+    return _jsZipLibPromise;
+  }
+
+  async function printAllCrewStatements(){
+    var mk = state.viewMonth;
+    var rangeInvalid = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && state.customRange.start > state.customRange.end);
+    var usingCustom = !!(state.customRange.enabled && state.customRange.start && state.customRange.end && !rangeInvalid);
+    var txns = usingCustom ? txnsForCustomRange(state.customRange.start, state.customRange.end) : (state.monthTxns[mk] || []);
+    var periodTitle = usingCustom ? formatDateRangeLabel(state.customRange.start, state.customRange.end) : periodLabel(mk);
+
+    function resolveDisplayName(t){
+      var c = state.crew.find(function(x){ return x.id === t.crewId; });
+      return c ? (c.name || t.crewName) : t.crewName;
+    }
+
+    var crewTxns = txns.filter(function(t){ return !t.isGratitude; });
+
+    var byId = {};
+    crewTxns.forEach(function(t){
+      byId[t.crewId] = byId[t.crewId] || {name: resolveDisplayName(t), total:0, byDate:{}};
+      var entry = byId[t.crewId];
+      entry.total += t.total;
+      var d = new Date(t.dateISO);
+      var isoDay = toISODateLocal(d);
+      entry.byDate[isoDay] = entry.byDate[isoDay] || {items:{}, subtotal:0, displayDate: d.toLocaleDateString()};
+      var dayEntry = entry.byDate[isoDay];
+      dayEntry.subtotal += t.total;
+      t.items.forEach(function(i){
+        dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, qty:0, amount:0};
+        dayEntry.items[i.itemId].qty += i.qty;
+        dayEntry.items[i.itemId].amount += i.price * i.qty;
+      });
+    });
+
+    var ids = Object.keys(byId);
+    if(!ids.length){
+      alert('No crew purchases recorded for this period — nothing to print.');
+      return;
+    }
+
+    var btn = document.getElementById('printAllStatementsBtn');
+    var originalLabel = btn ? btn.textContent : '';
+    if(btn){ btn.disabled = true; btn.textContent = 'Building PDFs…'; }
+
+    try{
+      await loadPdfLibs();
+      var JSZip = await loadJSZipLib();
+      var zip = new JSZip();
+      var jsPDFCtor = window.jspdf.jsPDF;
+      var periodTag = usingCustom ? (state.customRange.start+'_to_'+state.customRange.end) : mk;
+
+      ids.forEach(function(id){
+        var c = byId[id];
+        var doc = new jsPDFCtor({unit:'pt', format:'a4'});
+        var margin = 40;
+        var y = 50;
+
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(16);
+        doc.text('Bonded Store — Crew Statement', margin, y);
+        y += 22;
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(11);
+        doc.text('Crew: ' + c.name, margin, y); y += 16;
+        doc.text('Period: ' + periodTitle, margin, y); y += 20;
+
+        var dateKeys = Object.keys(c.byDate).sort();
+        dateKeys.forEach(function(dk){
+          var day = c.byDate[dk];
+          if(y > 740){ doc.addPage(); y = 50; }
+          doc.setFont('helvetica','bold');
+          doc.setFontSize(11);
+          doc.text(day.displayDate, margin, y);
+          y += 6;
+          var body = Object.keys(day.items).map(function(iid){
+            var it = day.items[iid];
+            return [it.name, String(it.qty), fmtMoney(it.amount)];
+          });
+          doc.autoTable({
+            startY: y,
+            margin: {left:margin, right:margin},
+            head: [['Item','Qty','Amount']],
+            body: body,
+            theme: 'grid',
+            styles: {fontSize:9, cellPadding:4},
+            headStyles: {fillColor:[240,233,216], textColor:[22,35,58]},
+            foot: [['', 'Subtotal — '+day.displayDate, fmtMoney(day.subtotal)]],
+            footStyles: {fillColor:[247,242,228], textColor:[22,35,58], fontStyle:'bold'}
+          });
+          y = doc.lastAutoTable.finalY + 18;
+        });
+
+        if(y > 740){ doc.addPage(); y = 50; }
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(12);
+        doc.text('Total — ' + c.name + ': ' + fmtMoney(c.total), margin, y + 6);
+
+        var safeName = (c.name || 'crew').replace(/[\\/:*?"<>|]/g,'').trim() || 'crew';
+        var fname = safeName + '-statement-' + periodTag + '.pdf';
+        zip.file(fname, doc.output('blob'));
+      });
+
+      var zipBlob = await zip.generateAsync({type:'blob'});
+      var url = URL.createObjectURL(zipBlob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'crew-statements-' + periodTag + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    }catch(err){
+      alert(err.message || 'Could not build the statements. Please try again.');
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
+    }
   }
 
   async function exportGratitudesWord(){
