@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -4125,7 +4125,7 @@ var qrcode = function() {
         var dayEntry = entry.byDate[isoDay];
         dayEntry.subtotal += t.total;
         t.items.forEach(function(i){
-          dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, qty:0, amount:0};
+          dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, price:i.price, qty:0, amount:0};
           dayEntry.items[i.itemId].qty += i.qty;
           dayEntry.items[i.itemId].amount += i.price * i.qty;
         });
@@ -4142,11 +4142,11 @@ var qrcode = function() {
           var day = c.byDate[dk];
           var itemRows = Object.keys(day.items).map(function(iid){
             var it = day.items[iid];
-            return '<tr><td>'+escapeHtml(it.name)+'</td><td>'+it.qty+'</td><td class="month-total">'+fmtMoney(it.amount)+'</td></tr>';
+            return '<tr><td>'+escapeHtml(it.name)+'</td><td>'+it.qty+'</td><td>'+fmtMoney(it.price)+'</td><td class="month-total">'+fmtMoney(it.amount)+'</td></tr>';
           }).join('');
           return '<div class="statement-date-group">'+
             '<div class="statement-date-label">'+day.displayDate+'</div>'+
-            '<div class="table-wrap"><table class="plain"><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>'+itemRows+'</tbody></table></div>'+
+            '<div class="table-wrap"><table class="plain"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>'+itemRows+'</tbody></table></div>'+
             '<div class="statement-date-subtotal"><span>Subtotal — '+day.displayDate+'</span><span>'+fmtMoney(day.subtotal)+'</span></div>'+
           '</div>';
         }).join('');
@@ -4646,7 +4646,7 @@ var qrcode = function() {
       var dayEntry = entry.byDate[isoDay];
       dayEntry.subtotal += t.total;
       t.items.forEach(function(i){
-        dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, qty:0, amount:0};
+        dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, price:i.price, qty:0, amount:0};
         dayEntry.items[i.itemId].qty += i.qty;
         dayEntry.items[i.itemId].amount += i.price * i.qty;
       });
@@ -4694,17 +4694,17 @@ var qrcode = function() {
           y += 6;
           var body = Object.keys(day.items).map(function(iid){
             var it = day.items[iid];
-            return [it.name, String(it.qty), fmtMoney(it.amount)];
+            return [it.name, String(it.qty), fmtMoney(it.price), fmtMoney(it.amount)];
           });
           doc.autoTable({
             startY: y,
             margin: {left:margin, right:margin},
-            head: [['Item','Qty','Amount']],
+            head: [['Item','Qty','Price','Amount']],
             body: body,
             theme: 'grid',
             styles: {fontSize:9, cellPadding:4},
             headStyles: {fillColor:[240,233,216], textColor:[22,35,58]},
-            foot: [['', 'Subtotal — '+day.displayDate, fmtMoney(day.subtotal)]],
+            foot: [['', '', 'Subtotal — '+day.displayDate, fmtMoney(day.subtotal)]],
             footStyles: {fillColor:[247,242,228], textColor:[22,35,58], fontStyle:'bold'}
           });
           y = doc.lastAutoTable.finalY + 18;
@@ -4876,7 +4876,7 @@ var qrcode = function() {
         var dayEntry = entry.byDate[isoDay];
         dayEntry.subtotal += t.total;
         t.items.forEach(function(i){
-          dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, qty:0, amount:0};
+          dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, price:i.price, qty:0, amount:0};
           dayEntry.items[i.itemId].qty += i.qty;
           dayEntry.items[i.itemId].amount += i.price * i.qty;
         });
@@ -4939,14 +4939,14 @@ var qrcode = function() {
       Object.keys(c.byDate).sort().forEach(function(dk){
         var day = c.byDate[dk];
         rows.push([day.displayDate]);
-        rows.push(['Item', 'Qty', 'Amount']);
+        rows.push(['Item', 'Qty', 'Price', 'Amount']);
         Object.keys(day.items).forEach(function(iid){
           var it = day.items[iid];
-          rows.push([it.name, it.qty, it.amount.toFixed(2)]);
+          rows.push([it.name, it.qty, it.price.toFixed(2), it.amount.toFixed(2)]);
         });
-        rows.push(['Subtotal — ' + day.displayDate, '', day.subtotal.toFixed(2)]);
+        rows.push(['Subtotal — ' + day.displayDate, '', '', day.subtotal.toFixed(2)]);
       });
-      rows.push(['Total — ' + c.name, '', c.total.toFixed(2)]);
+      rows.push(['Total — ' + c.name, '', '', c.total.toFixed(2)]);
     });
     rows.push([]);
     rows.push(['Itemized Gratitudes — grouped by port']);
@@ -4973,7 +4973,7 @@ var qrcode = function() {
     try{
       var XLSX = await loadXLSXLib();
       var ws = XLSX.utils.aoa_to_sheet(rows);
-      ws['!cols'] = [{wch:32},{wch:20},{wch:16}];
+      ws['!cols'] = [{wch:32},{wch:14},{wch:14},{wch:16}];
       var wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Report');
       XLSX.writeFile(wb, filename);
