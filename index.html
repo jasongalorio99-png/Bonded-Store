@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -5057,17 +5057,22 @@ var qrcode = function() {
   }
 
   async function resetStockCount(){
-    if(!confirm('Reset stock count? This moves each item\'s current remaining stock into Opening stock, and Sold will start counting from zero again. This cannot be undone.')) return;
+    if(!confirm('Reset stock count? This moves each item\'s current remaining stock into Opening stock, Sold starts counting from zero again, and any item left with zero or less stock will be removed from the catalog. This cannot be undone.')) return;
     var sold = soldSinceCycleStart();
     state.catalog.forEach(function(it){
       var soldQty = sold[it.id] || 0;
       var remaining = (it.openingStock || 0) - soldQty;
       it.openingStock = remaining;
     });
+    var removedNames = state.catalog.filter(function(it){ return (it.openingStock || 0) <= 0; }).map(function(it){ return it.name; });
+    state.catalog = state.catalog.filter(function(it){ return (it.openingStock || 0) > 0; });
     state.settings.stockCycleStart = new Date().toISOString();
     await storageSet('catalog', state.catalog);
     await storageSet('settings', state.settings);
     render();
+    if(removedNames.length){
+      alert('Removed out-of-stock item(s): ' + removedNames.join(', '));
+    }
   }
 
   async function saveCutoffForMonth(){
