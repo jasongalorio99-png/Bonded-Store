@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -794,6 +794,7 @@
   @media (max-width:900px){.sell-layout{grid-template-columns:1fr;}}
   .crew-select{width:100%;max-width:320px;}
   .stock-input{width:78px;}
+  .price-input{width:88px;}
   .expiry-input{width:150px;}
   .expiry-input.exp-soon{border-color:var(--stamp);color:var(--stamp-dark);}
   .expiry-input.exp-over{border-color:var(--stamp-dark);color:var(--stamp-dark);}
@@ -3764,7 +3765,7 @@ var qrcode = function() {
         else if(status === 'soon') expTag = '<span class="exp-tag exp-soon">Expires in '+days+'d</span>';
         var stockTag = isOut ? '<span class="exp-tag stock-out-tag">Out of stock</span>' : '';
         rows += '<tr'+rowClass+'><td>'+escapeHtml(it.name)+'</td>'+
-          '<td class="month-total">'+fmtMoney(it.price)+'</td>'+
+          '<td><input type="number" class="price-input" min="0" step="0.01" value="'+it.price+'" data-price="'+it.id+'"></td>'+
           '<td><input type="number" class="stock-input" min="0" step="1" value="'+opening+'" data-stock="'+it.id+'"></td>'+
           '<td class="month-total">'+soldQty+'</td>'+
           '<td class="month-total">'+remaining+stockTag+'</td>'+
@@ -4434,6 +4435,11 @@ var qrcode = function() {
     main.querySelectorAll('[data-del-item]').forEach(function(el){
       el.addEventListener('click', function(){ removeItem(el.dataset.delItem); });
     });
+    main.querySelectorAll('[data-price]').forEach(function(el){
+      el.addEventListener('change', function(){
+        updateItemPrice(el.dataset.price, el.value);
+      });
+    });
     main.querySelectorAll('[data-stock]').forEach(function(el){
       el.addEventListener('change', function(){
         updateOpeningStock(el.dataset.stock, el.value);
@@ -4851,6 +4857,13 @@ var qrcode = function() {
       var c = state.crew.find(function(x){ return x.id === t.crewId; });
       return c ? (c.name || t.crewName) : t.crewName;
     }
+    function crewNoOf(crewId){
+      var c = state.crew.find(function(x){ return x.id === crewId; });
+      return (c && c.no) ? c.no : Infinity;
+    }
+    function sortByCrewNo(ids){
+      return ids.slice().sort(function(a,b){ return crewNoOf(a) - crewNoOf(b); });
+    }
 
     var crewTxns = txns.filter(function(t){ return !t.isGratitude; });
     var gratitudeTxns = txns.filter(function(t){ return !!t.isGratitude; });
@@ -4864,21 +4877,16 @@ var qrcode = function() {
       });
       return by;
     }
-    function crewStatementsOf(list){
+    function crewItemTotalsOf(list){
       var byId = {};
       list.forEach(function(t){
-        byId[t.crewId] = byId[t.crewId] || {name: resolveDisplayName(t), total:0, byDate:{}};
+        byId[t.crewId] = byId[t.crewId] || {name: resolveDisplayName(t), total:0, items:{}};
         var entry = byId[t.crewId];
         entry.total += t.total;
-        var d = new Date(t.dateISO);
-        var isoDay = toISODateLocal(d);
-        entry.byDate[isoDay] = entry.byDate[isoDay] || {items:{}, subtotal:0, displayDate: d.toLocaleDateString()};
-        var dayEntry = entry.byDate[isoDay];
-        dayEntry.subtotal += t.total;
         t.items.forEach(function(i){
-          dayEntry.items[i.itemId] = dayEntry.items[i.itemId] || {name:i.name, price:i.price, qty:0, amount:0};
-          dayEntry.items[i.itemId].qty += i.qty;
-          dayEntry.items[i.itemId].amount += i.price * i.qty;
+          entry.items[i.itemId] = entry.items[i.itemId] || {name:i.name, price:i.price, qty:0, amount:0};
+          entry.items[i.itemId].qty += i.qty;
+          entry.items[i.itemId].amount += i.price * i.qty;
         });
       });
       return byId;
@@ -4913,12 +4921,13 @@ var qrcode = function() {
     rows.push(['Period', periodTitle]);
     rows.push([]);
     rows.push(['Deduction by crew member']);
-    rows.push(['Crew', 'Purchases', 'Amount']);
-    Object.keys(byCrew).sort(function(a,b){return byCrew[b].total-byCrew[a].total;}).forEach(function(id){
+    rows.push(['No.', 'Crew', 'Purchases', 'Amount']);
+    sortByCrewNo(Object.keys(byCrew)).forEach(function(id){
       var c = byCrew[id];
-      rows.push([c.name, c.count, c.total.toFixed(2)]);
+      var no = crewNoOf(id);
+      rows.push([isFinite(no) ? no : '', c.name, c.count, c.total.toFixed(2)]);
     });
-    rows.push(['', 'Grand total (crew)', grandCrew.toFixed(2)]);
+    rows.push(['', '', 'Grand total (crew)', grandCrew.toFixed(2)]);
     rows.push([]);
     rows.push(['Gratitudes']);
     rows.push(['Sponsor / recipient', 'Given', 'Amount']);
@@ -4930,21 +4939,17 @@ var qrcode = function() {
     rows.push([]);
     rows.push(['Combined total (crew + Gratitudes)', '', (grandCrew + grandGratitude).toFixed(2)]);
     rows.push([]);
-    rows.push(['Itemized purchases by crew — grouped by date']);
-    var byCrewItems = crewStatementsOf(crewTxns);
-    Object.keys(byCrewItems).sort(function(a,b){return byCrewItems[b].total-byCrewItems[a].total;}).forEach(function(id){
+    rows.push(['Itemized purchases by crew — totals per item, as per Crew List numbering']);
+    var byCrewItems = crewItemTotalsOf(crewTxns);
+    sortByCrewNo(Object.keys(byCrewItems)).forEach(function(id){
       var c = byCrewItems[id];
+      var no = crewNoOf(id);
       rows.push([]);
-      rows.push([c.name]);
-      Object.keys(c.byDate).sort().forEach(function(dk){
-        var day = c.byDate[dk];
-        rows.push([day.displayDate]);
-        rows.push(['Item', 'Qty', 'Price', 'Amount']);
-        Object.keys(day.items).forEach(function(iid){
-          var it = day.items[iid];
-          rows.push([it.name, it.qty, it.price.toFixed(2), it.amount.toFixed(2)]);
-        });
-        rows.push(['Subtotal — ' + day.displayDate, '', '', day.subtotal.toFixed(2)]);
+      rows.push([(isFinite(no) ? ('No. ' + no + ' — ') : '') + c.name]);
+      rows.push(['Item', 'Qty', 'Price', 'Amount']);
+      Object.keys(c.items).forEach(function(iid){
+        var it = c.items[iid];
+        rows.push([it.name, it.qty, it.price.toFixed(2), it.amount.toFixed(2)]);
       });
       rows.push(['Total — ' + c.name, '', '', c.total.toFixed(2)]);
     });
@@ -5003,6 +5008,17 @@ var qrcode = function() {
     };
     window.addEventListener('afterprint', cleanup);
     setTimeout(cleanup, 2000);
+  }
+
+  async function updateItemPrice(itemId, rawVal){
+    var val = parseFloat(rawVal);
+    if(isNaN(val) || val < 0) val = 0;
+    var it = state.catalog.find(function(x){return x.id===itemId;});
+    if(it){
+      it.price = val;
+      await storageSet('catalog', state.catalog);
+    }
+    render();
   }
 
   async function updateOpeningStock(itemId, rawVal){
