@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -3224,7 +3224,7 @@ var qrcode = function() {
     declareCart: {},
     selectedCrewId: null,
     gratitudeOpen: false,
-    gratitude: {sponsor:'', port:'', forWhom:''},
+    gratitude: {sponsor:'', port:'', forWhom:'', date:''},
     declareCrewId: null,
     tab: 'home',
     settings: {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null},
@@ -3576,26 +3576,39 @@ var qrcode = function() {
     var gratitudeChips = GRATITUDE_SPONSORS.map(function(opt){
       return '<button class="chip-btn'+(state.gratitude.sponsor===opt?' active':'')+'" data-gratitude-sponsor="'+opt+'">'+opt+'</button>';
     }).join('');
+    var gratitudeDateVal = state.gratitude.date || toISODateLocal(new Date());
     var gratitudeCardHtml = '<div class="card"><h3>Gratitudes</h3>'+
       '<div class="gratitude-options">'+gratitudeChips+'</div>'+
       (state.gratitude.sponsor ?
         '<div class="add-row" style="margin-top:12px;">'+
           '<input type="text" id="gratitudePort" placeholder="Port name" value="'+escapeHtml(state.gratitude.port)+'">'+
           '<input type="text" id="gratitudeForWhom" placeholder="For whom / purpose" value="'+escapeHtml(state.gratitude.forWhom)+'">'+
-        '</div>' : '')+
+          '<label style="display:flex;flex-direction:column;font-size:11.5px;color:var(--grey);gap:3px;">Date'+
+            '<input type="date" id="gratitudeDate" value="'+gratitudeDateVal+'">'+
+          '</label>'+
+        '</div>'+
+        '<p class="settings-note" style="margin:6px 0 0;">Defaults to today. Back-date this if the items already left stock before your last reset — that keeps it out of the current stock cycle\'s count and files it under the correct month\'s report instead.</p>'
+      : '')+
     '</div>';
 
-    var mk = periodKeyForDate(new Date());
-    var todays = (state.monthTxns[mk] || []).filter(function(t){
+    var crewMk = periodKeyForDate(new Date());
+    var gratMk = monthKey(new Date());
+    var todaysCrew = (state.monthTxns[crewMk] || []).filter(function(t){
       var d = new Date(t.dateISO);
-      return d.toDateString() === new Date().toDateString();
-    }).slice().reverse();
+      return !t.isGratitude && d.toDateString() === new Date().toDateString();
+    });
+    var todaysGrat = (state.monthTxns[gratMk] || []).filter(function(t){
+      var d = new Date(t.dateISO);
+      return t.isGratitude && d.toDateString() === new Date().toDateString();
+    });
+    var todays = todaysCrew.concat(todaysGrat).sort(function(a,b){ return new Date(b.dateISO) - new Date(a.dateISO); });
 
     var todayHtml = todays.length ? todays.map(function(t){
+      var voidMk = t.isGratitude ? gratMk : crewMk;
       return '<tr><td>'+escapeHtml(t.crewName)+'</td><td>'+t.items.length+' item(s)</td>'+
         '<td class="month-total">'+fmtMoney(t.total)+'</td>'+
         '<td class="row-actions"><button class="icon-btn" data-view-receipt="'+t.id+'">Receipt</button>'+
-        '<button class="icon-btn" data-void="'+t.id+'">Void</button></td></tr>';
+        '<button class="icon-btn" data-void="'+t.id+'" data-void-mk="'+voidMk+'">Void</button></td></tr>';
     }).join('') : '<tr><td colspan="4" class="empty-note">No sales recorded yet today.</td></tr>';
 
     var currentSaleLabel;
@@ -4214,7 +4227,7 @@ var qrcode = function() {
 
     var txnRows = txns.slice().reverse().map(function(t){
       var d = new Date(t.dateISO);
-      var txnMk = periodKeyForDate(d);
+      var txnMk = t.isGratitude ? monthKey(d) : periodKeyForDate(d);
       return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(resolveDisplayName(t))+(t.isGratitude?' <span class="exp-tag stock-out-tag" style="margin-left:6px;">Gratitude</span>':'')+'</td><td>'+t.items.length+'</td>'+
         '<td class="month-total">'+fmtMoney(t.total)+'</td>'+
         '<td class="row-actions"><button class="icon-btn" data-view-receipt="'+t.id+'">Receipt</button>'+
@@ -4308,14 +4321,14 @@ var qrcode = function() {
       '<p class="settings-note" style="margin:0 0 14px;">Pick a calendar month, set the day it closes for salary-deduction prep, and save. Each month can have its own cut-off — sales made after that day roll into next month\'s report.</p>'+
       '<div class="add-row">'+
         '<select id="cutoffMonthSelect">'+cutoffMonthOptions.join('')+'</select>'+
-        '<input type="number" id="cutoffDayInput" min="1" max="28" value="'+effectiveCutoff+'" style="max-width:90px;">'+
+        '<input type="number" id="cutoffDayInput" min="1" max="31" value="'+effectiveCutoff+'" style="max-width:90px;">'+
         '<button class="btn btn-outline" id="saveCutoffBtn">Save for this month</button>'+
         (hasOverride ? '<button class="btn btn-outline" id="clearCutoffBtn">Use default</button>' : '')+
       '</div>'+
       '<p class="settings-note">'+(hasOverride ? 'This month has its own cut-off (day '+effectiveCutoff+').' : 'This month is using the default cut-off (day '+defaultCutoff+').')+'</p>'+
       '<div class="add-row" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft);">'+
         '<label style="font-size:13px;color:var(--grey);">Default cut-off (for months without their own setting)</label>'+
-        '<input type="number" id="defaultCutoffInput" min="1" max="28" value="'+defaultCutoff+'" style="max-width:90px;">'+
+        '<input type="number" id="defaultCutoffInput" min="1" max="31" value="'+defaultCutoff+'" style="max-width:90px;">'+
         '<button class="btn btn-outline" id="saveDefaultCutoffBtn">Save default</button>'+
       '</div>'+
     '</div>'+
@@ -4364,7 +4377,7 @@ var qrcode = function() {
     if(crewSelect) crewSelect.addEventListener('change', function(){
       state.selectedCrewId = crewSelect.value || null;
       if(state.selectedCrewId){
-        state.gratitude = {sponsor:'', port:'', forWhom:''};
+        state.gratitude = {sponsor:'', port:'', forWhom:'', date:''};
         state.gratitudeOpen = false;
       }
       render();
@@ -4380,6 +4393,8 @@ var qrcode = function() {
     if(gratitudePort) gratitudePort.addEventListener('change', function(){ state.gratitude.port = gratitudePort.value; render(); });
     var gratitudeForWhom = document.getElementById('gratitudeForWhom');
     if(gratitudeForWhom) gratitudeForWhom.addEventListener('change', function(){ state.gratitude.forWhom = gratitudeForWhom.value; render(); });
+    var gratitudeDate = document.getElementById('gratitudeDate');
+    if(gratitudeDate) gratitudeDate.addEventListener('change', function(){ state.gratitude.date = gratitudeDate.value; render(); });
 
     main.querySelectorAll('[data-toggle-cat]').forEach(function(el){
       el.addEventListener('click', function(){
@@ -5059,7 +5074,7 @@ var qrcode = function() {
     var input = document.getElementById('cutoffDayInput');
     var val = parseInt(input.value, 10);
     if(isNaN(val) || val < 1) val = 1;
-    if(val > 28) val = 28;
+    if(val > 31) val = 31;
     state.settings.periodCutoffs = state.settings.periodCutoffs || {};
     state.settings.periodCutoffs[state.cutoffEditMonth] = val;
     await storageSet('settings', state.settings);
@@ -5080,7 +5095,7 @@ var qrcode = function() {
     var input = document.getElementById('defaultCutoffInput');
     var val = parseInt(input.value, 10);
     if(isNaN(val) || val < 1) val = 1;
-    if(val > 28) val = 28;
+    if(val > 31) val = 31;
     state.settings.defaultCutoffDay = val;
     await storageSet('settings', state.settings);
     state.viewMonth = periodKeyForDate(new Date());
@@ -5169,6 +5184,13 @@ var qrcode = function() {
       var port = state.gratitude.port.trim();
       var forWhom = state.gratitude.forWhom.trim();
       var label = 'Gratitude — '+sponsor+(port ? ' ('+port+')' : '')+(forWhom ? ' — '+forWhom : '');
+      var now = new Date();
+      var chosenDateISO = now.toISOString();
+      if(state.gratitude.date){
+        var parts = state.gratitude.date.split('-');
+        var chosen = new Date(+parts[0], +parts[1]-1, +parts[2], now.getHours(), now.getMinutes(), now.getSeconds());
+        if(!isNaN(chosen.getTime())) chosenDateISO = chosen.toISOString();
+      }
       txn = {
         id: uid(),
         receiptNo: no,
@@ -5178,19 +5200,43 @@ var qrcode = function() {
         gratitudeSponsor: sponsor,
         gratitudePort: port,
         gratitudeForWhom: forWhom,
-        dateISO: new Date().toISOString(),
+        dateISO: chosenDateISO,
         items: items,
         total: total
       };
     }
-    var mk = periodKeyForDate(new Date());
+
+    // A Gratitude dated on/before the last stock reset means those items were still
+    // counted as on-hand at that reset — so the live Opening Stock needs correcting too,
+    // not just the report.
+    if(txn.isGratitude && state.settings.stockCycleStart){
+      var cycleStart = new Date(state.settings.stockCycleStart);
+      var txnDate = new Date(txn.dateISO);
+      if(txnDate <= cycleStart){
+        var adjustMsg = 'This Gratitude is dated on or before your last stock reset ('+cycleStart.toLocaleDateString()+').\n\n'+
+          'Since those items were still counted as on-hand at that reset, tap OK to also reduce Opening Stock for the affected items now, so current Remaining stays accurate.\n\n'+
+          'Tap Cancel to skip this and adjust stock yourself later.';
+        if(confirm(adjustMsg)){
+          items.forEach(function(i){
+            var catItem = state.catalog.find(function(x){return x.id===i.itemId;});
+            if(catItem) catItem.openingStock = (catItem.openingStock || 0) - i.qty;
+          });
+          await storageSet('catalog', state.catalog);
+          txn.stockAdjusted = true;
+        }
+      }
+    }
+    // Gratitudes always file under their own actual calendar month, ignoring the
+    // payroll cut-off day entirely — only crew purchases roll over at the cut-off.
+    var mk = txn.isGratitude ? monthKey(new Date(txn.dateISO)) : periodKeyForDate(new Date(txn.dateISO));
+    await ensureMonthLoaded(mk);
     state.monthTxns[mk] = state.monthTxns[mk] || [];
     state.monthTxns[mk].push(txn);
     await storageSet('txns:' + mk, state.monthTxns[mk]);
 
     state.cart = {};
     state.selectedCrewId = null;
-    state.gratitude = {sponsor:'', port:'', forWhom:''};
+    state.gratitude = {sponsor:'', port:'', forWhom:'', date:''};
     state.gratitudeOpen = false;
     render();
     showReceipt(txn);
@@ -5417,7 +5463,7 @@ var qrcode = function() {
         '<div class="r-dash"></div>'+
         '<div class="r-total-row"><span>Total</span><span>'+fmtMoney(txn.total)+'</span></div>'+
         (qrSvg ? ('<div class="r-qr">'+qrSvg+'</div>') : '')+
-        '<p class="r-foot">Sponsored — not charged to crew payroll.<br>Keep this copy for your records.</p>';
+        '<p class="r-foot">Sponsored — not charged to crew payroll.'+(txn.stockAdjusted ? '<br>Opening Stock adjusted for these items.' : '')+'<br>Keep this copy for your records.</p>';
     } else {
       html = ''+
         '<div class="r-center"><span class="r-stamp">BONDED STORE</span></div>'+
