@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -3229,6 +3229,7 @@ var qrcode = function() {
     gratitudeOpen: false,
     gratitude: {sponsor:'', port:'', forWhom:'', date:''},
     declareCrewId: null,
+    declareGratitude: {active:false, authority:'', port:'', notes:''},
     tab: 'home',
     settings: {defaultCutoffDay: 1, periodCutoffs: {}, stockCycleStart: null},
     cutoffEditMonth: monthKey(new Date()),
@@ -3847,7 +3848,7 @@ var qrcode = function() {
       ? '<select id="declareCrewSelect" class="crew-select">'+crewOptions+'</select>'
       : '<div class="empty-note">No crew added yet. Go to the Crew tab to add names.</div>';
 
-    var declareCatalog = state.catalog.filter(function(it){ return /cigar/i.test(it.category); });
+    var declareCatalog = state.catalog;
     var cats = {};
     declareCatalog.forEach(function(it){
       cats[it.category] = cats[it.category] || [];
@@ -3868,7 +3869,7 @@ var qrcode = function() {
       }).join('');
       return '<div class="cat-block"><div class="cat-label" style="margin-bottom:8px;">'+escapeHtml(cat)+'</div><div class="item-grid">'+tiles+'</div></div>';
     }).join('');
-    if(!declareCatalog.length) catsHtml = '<div class="empty-note">No cigarette items in your catalog yet. Add some on the Items tab (category name containing "Cigar...").</div>';
+    if(!declareCatalog.length) catsHtml = '<div class="empty-note">No items in your catalog yet. Add some on the Items tab.</div>';
 
     var cartEntries = Object.keys(state.declareCart).filter(function(id){return state.declareCart[id]>0;});
     var cartLines = cartEntries.map(function(id){
@@ -3878,30 +3879,55 @@ var qrcode = function() {
     }).join('');
 
     var selectedCrew = state.crew.find(function(c){return c.id===state.declareCrewId;});
-    var canSave = selectedCrew && cartEntries.length>0;
+    var gratitudeActive = !!state.declareGratitude.active;
+    var canSave = (selectedCrew || gratitudeActive) && cartEntries.length>0;
+
+    var declareGratitudeCardHtml = '<div class="card"><h3>Gratitude</h3>'+
+      (gratitudeActive ?
+        '<p class="page-sub" style="margin:0 0 12px;">Log items taken by port authorities during inspection. These aren\'t charged to any crew member.</p>'+
+        '<div class="add-row">'+
+          '<input type="text" id="declareGratAuthority" placeholder="Authority / agency (e.g. Customs)" value="'+escapeHtml(state.declareGratitude.authority)+'">'+
+          '<input type="text" id="declareGratPort" placeholder="Port name" value="'+escapeHtml(state.declareGratitude.port)+'">'+
+          '<input type="text" id="declareGratNotes" placeholder="Notes (optional)" value="'+escapeHtml(state.declareGratitude.notes)+'">'+
+        '</div>'+
+        '<button class="btn btn-outline" id="declareGratCancelBtn" style="margin-top:10px;">Cancel Gratitude</button>'
+      : '<button class="btn btn-outline" id="declareGratToggleBtn">+ Gratitude (items taken by authorities)</button>')+
+    '</div>';
 
     var pk = periodKeyForDate(new Date());
     var list = state.declarations[pk] || [];
     var listHtml = list.length ? list.slice().reverse().map(function(dcl){
       var d = new Date(dcl.dateISO);
       var itemsStr = dcl.items.map(function(i){return escapeHtml(i.name)+' x'+i.qty;}).join(', ');
-      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(dcl.crewName)+'</td><td>'+itemsStr+'</td>'+
+      return '<tr><td>'+d.toLocaleDateString()+'</td><td>'+escapeHtml(dcl.crewName)+(dcl.isAuthorityTaken?' <span class="exp-tag stock-out-tag" style="margin-left:6px;">Gratitude</span>':'')+'</td><td>'+itemsStr+'</td>'+
         '<td class="row-actions"><button class="icon-btn" data-del-decl="'+dcl.id+'">Remove</button></td></tr>';
     }).join('') : '<tr><td colspan="4" class="empty-note">No declarations recorded this period.</td></tr>';
+
+    var currentDeclLabel;
+    if(gratitudeActive){
+      currentDeclLabel = '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">Gratitude'+(state.declareGratitude.authority?' — '+escapeHtml(state.declareGratitude.authority):'')+
+        (state.declareGratitude.port ? '<br><span style="font-weight:400;font-size:12.5px;color:var(--grey);">'+escapeHtml(state.declareGratitude.port)+'</span>' : '')+
+      '</div>';
+    } else if(selectedCrew){
+      currentDeclLabel = '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">'+escapeHtml(selectedCrew.name)+'</div>';
+    } else {
+      currentDeclLabel = '<div class="empty-note" style="color:#8E9AB3;">Select a crew member or add a Gratitude</div>';
+    }
 
     return ''+
     slopchestHeader()+
     slopchestSubNav('declare')+
     '<h2 class="page-title">Crew declaration</h2>'+
-    '<p class="page-sub">Log cigarette items handed out to crew as a declared allowance. Only cigarette items appear here. These are kept on record but are not charged to the crew member and do not reduce inventory stock.</p>'+
+    '<p class="page-sub">Log items handed out to crew as a declared allowance. These are kept on record but are not charged to the crew member and do not reduce inventory stock.</p>'+
     '<div class="sell-layout">'+
       '<div>'+
         '<div class="card"><h3>Crew member</h3>'+crewSelectHtml+'</div>'+
+        declareGratitudeCardHtml+
         '<div class="card"><h3>Items declared</h3>'+catsHtml+'</div>'+
       '</div>'+
       '<div class="cart-panel">'+
         '<h3>This declaration</h3>'+
-        (selectedCrew ? '<div style="font-size:14px;font-weight:600;margin-bottom:10px;">'+escapeHtml(selectedCrew.name)+'</div>' : '<div class="empty-note" style="color:#8E9AB3;">Select a crew member</div>')+
+        currentDeclLabel+
         (cartLines || '<div class="empty-note" style="color:#8E9AB3;">Nothing selected</div>')+
         '<button class="btn btn-stamp btn-block" id="saveDeclBtn" '+(canSave?'':'disabled')+'>Save declaration</button>'+
       '</div>'+
@@ -4476,8 +4502,28 @@ var qrcode = function() {
     var declareCrewSelect = document.getElementById('declareCrewSelect');
     if(declareCrewSelect) declareCrewSelect.addEventListener('change', function(){
       state.declareCrewId = declareCrewSelect.value || null;
+      if(state.declareCrewId){
+        state.declareGratitude = {active:false, authority:'', port:'', notes:''};
+      }
       render();
     });
+    var declareGratToggleBtn = document.getElementById('declareGratToggleBtn');
+    if(declareGratToggleBtn) declareGratToggleBtn.addEventListener('click', function(){
+      state.declareGratitude.active = true;
+      state.declareCrewId = null;
+      render();
+    });
+    var declareGratCancelBtn = document.getElementById('declareGratCancelBtn');
+    if(declareGratCancelBtn) declareGratCancelBtn.addEventListener('click', function(){
+      state.declareGratitude = {active:false, authority:'', port:'', notes:''};
+      render();
+    });
+    var declareGratAuthority = document.getElementById('declareGratAuthority');
+    if(declareGratAuthority) declareGratAuthority.addEventListener('change', function(){ state.declareGratitude.authority = declareGratAuthority.value; render(); });
+    var declareGratPort = document.getElementById('declareGratPort');
+    if(declareGratPort) declareGratPort.addEventListener('change', function(){ state.declareGratitude.port = declareGratPort.value; render(); });
+    var declareGratNotes = document.getElementById('declareGratNotes');
+    if(declareGratNotes) declareGratNotes.addEventListener('change', function(){ state.declareGratitude.notes = declareGratNotes.value; render(); });
     main.querySelectorAll('[data-decl-plus]').forEach(function(el){
       el.addEventListener('click', function(){
         var id = el.dataset.declPlus;
@@ -5263,7 +5309,8 @@ var qrcode = function() {
 
   async function saveDeclaration(){
     var crew = state.crew.find(function(c){return c.id===state.declareCrewId;});
-    if(!crew) return;
+    var gratitudeActive = !!state.declareGratitude.active;
+    if(!crew && !gratitudeActive) return;
     var cartEntries = Object.keys(state.declareCart).filter(function(id){return state.declareCart[id]>0;});
     if(!cartEntries.length) return;
 
@@ -5272,19 +5319,39 @@ var qrcode = function() {
       return {itemId:id, name:it.name, qty:state.declareCart[id]};
     });
     var pk = periodKeyForDate(new Date());
-    var dcl = {
-      id: uid(),
-      crewId: crew.id,
-      crewName: crew.name,
-      dateISO: new Date().toISOString(),
-      items: items
-    };
+    var dcl;
+    if(crew){
+      dcl = {
+        id: uid(),
+        crewId: crew.id,
+        crewName: crew.name,
+        dateISO: new Date().toISOString(),
+        items: items
+      };
+    } else {
+      var authority = state.declareGratitude.authority.trim();
+      var port = state.declareGratitude.port.trim();
+      var notes = state.declareGratitude.notes.trim();
+      var label = 'Gratitude — '+(authority || 'Port authority')+(port ? ' ('+port+')' : '')+(notes ? ' — '+notes : '');
+      dcl = {
+        id: uid(),
+        crewId: 'declgrat-'+uid(),
+        crewName: label,
+        isAuthorityTaken: true,
+        authority: authority,
+        port: port,
+        notes: notes,
+        dateISO: new Date().toISOString(),
+        items: items
+      };
+    }
     state.declarations[pk] = state.declarations[pk] || [];
     state.declarations[pk].push(dcl);
     await storageSet('decl:' + pk, state.declarations[pk]);
 
     state.declareCart = {};
     state.declareCrewId = null;
+    state.declareGratitude = {active:false, authority:'', port:'', notes:''};
     render();
   }
 
