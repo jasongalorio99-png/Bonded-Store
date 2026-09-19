@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -387,6 +387,9 @@
   }
   .item-tile .name{font-size:13.5px;font-weight:600;color:var(--ink-2);}
   .item-tile .price{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--grey);}
+  .remaining-tag{font-weight:600;color:var(--teal);}
+  .remaining-tag.remaining-low{color:#B8842E;}
+  .remaining-tag.remaining-out{color:var(--stamp);}
   .item-tile-out{background:rgba(35,52,80,0.06);border-color:var(--ink-2);}
   .qty-row{display:flex;align-items:center;gap:8px;margin-top:2px;}
   .qty-btn{
@@ -3534,9 +3537,11 @@ var qrcode = function() {
         var qty = state.cart[it.id] || 0;
         var remaining = (it.openingStock || 0) - (sold[it.id] || 0);
         var isOut = remaining <= 0;
+        var runningRemaining = remaining - qty;
+        var remainingClass = runningRemaining <= 0 ? ' remaining-out' : (runningRemaining <= 3 ? ' remaining-low' : '');
         return '<div class="item-tile'+(isOut?' item-tile-out':'')+'">'+
           '<div class="name">'+escapeHtml(it.name)+(isOut?' <span class="exp-tag stock-out-tag">Out of stock</span>':'')+'</div>'+
-          '<div class="price">'+fmtMoney(it.price)+'</div>'+
+          '<div class="price">'+fmtMoney(it.price)+' &middot; <span class="remaining-tag'+remainingClass+'">Remaining: '+runningRemaining+'</span></div>'+
           '<div class="qty-row">'+
             '<button class="qty-btn minus" data-minus="'+it.id+'">-</button>'+
             '<span class="qty-val">'+qty+'</span>'+
