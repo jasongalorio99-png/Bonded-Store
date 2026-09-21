@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Chit">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -571,8 +571,24 @@
     font-family:'IBM Plex Mono',monospace;
     font-size:11px;
     white-space:nowrap;
+    margin:2px;
   }
   .give-voucher-btn:hover{background:var(--teal-dark);}
+  .give-voucher-btn-remove{background:var(--stamp);}
+  .give-voucher-btn-remove:hover{background:var(--stamp-dark);}
+  .give-voucher-btn[disabled]{opacity:0.35;cursor:not-allowed;}
+  .voucher-manual-input{
+    all:unset;
+    box-sizing:border-box;
+    width:56px;
+    text-align:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    color:var(--ink);
+    border-bottom:1px dashed var(--line);
+    padding:2px 4px;
+  }
+  .voucher-manual-input:focus{background:rgba(47,110,91,0.08);}
   table.sheet-balance{width:100%;border-collapse:collapse;}
   table.sheet-balance td{
     border:1px solid var(--line);
@@ -3219,6 +3235,7 @@ var qrcode = function() {
     vouchers: [],
     voucherMeta: {vessel:'', place:''},
     voucherStock: {},
+    voucherManual: {},
     allotments: {
       filipino: {columns:[], cellData:{}},
       nonFilipino: {columns:[], cellData:{}}
@@ -3420,6 +3437,7 @@ var qrcode = function() {
     state.vouchers = await storageGet('vouchers', []);
     state.voucherMeta = await storageGet('voucherMeta', {vessel:'', place:''});
     state.voucherStock = await storageGet('voucherStock', {});
+    state.voucherManual = await storageGet('voucherManual', {});
     state.allotments = await storageGet('allotments', {
       filipino: {columns: [{id:'c1', label:'Allotment'}], cellData: {}},
       nonFilipino: {columns: [{id:'c1', label:'Allotment'}], cellData: {}}
@@ -4039,25 +4057,38 @@ var qrcode = function() {
     var thisPeriodVouchers = state.vouchers.filter(function(v){ return monthKey(new Date(v.dateISO)) === periodKey; });
     var countByCrew = {};
     thisPeriodVouchers.forEach(function(v){ countByCrew[v.crewId] = (countByCrew[v.crewId]||0) + 1; });
-    var distributed = thisPeriodVouchers.length;
+    var loggedTotal = thisPeriodVouchers.length;
+
+    var manualByCrew = state.voucherManual[periodKey] || {};
+    var manualTotal = 0;
+    Object.keys(manualByCrew).forEach(function(id){ manualTotal += Number(manualByCrew[id]) || 0; });
+
+    var distributed = loggedTotal + manualTotal;
 
     var stock = state.voucherStock[periodKey] || {opening:0, restocked:0};
     var closing = (Number(stock.opening)||0) + (Number(stock.restocked)||0) - distributed;
 
     var rows = state.crew.map(function(c, i){
       var count = countByCrew[c.id] || 0;
+      var manual = (manualByCrew[c.id] != null) ? manualByCrew[c.id] : 0;
+      var rowTotal = count + (Number(manual) || 0);
       return '<tr><td class="center">'+(i+1)+'</td>'+
         '<td>'+escapeHtml(c.name)+'</td>'+
         '<td class="center">'+count+'</td>'+
-        '<td class="center"><button class="give-voucher-btn" data-give-voucher="'+c.id+'">+ Add</button></td></tr>';
+        '<td class="center"><input type="number" min="0" step="1" class="voucher-manual-input" data-voucher-manual="'+c.id+'" value="'+manual+'"></td>'+
+        '<td class="center">'+rowTotal+'</td>'+
+        '<td class="center">'+
+          '<button class="give-voucher-btn" data-give-voucher="'+c.id+'">+ Add</button> '+
+          '<button class="give-voucher-btn give-voucher-btn-remove" data-remove-voucher-for="'+c.id+'"'+(count<1?' disabled':'')+'>− Remove</button>'+
+        '</td></tr>';
     }).join('');
-    if(!state.crew.length) rows = '<tr><td colspan="4" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
+    if(!state.crew.length) rows = '<tr><td colspan="6" class="empty-note">No crew added yet. Go to the Crew tab to add names.</td></tr>';
 
     return ''+
     voucherHeader()+
     voucherSubNav('vouchers')+
     '<h2 class="page-title">Internet vouchers</h2>'+
-    '<p class="page-sub">Tap "+ Add" against a crew member to log a voucher handed out today. Vouchers Received tallies up automatically for '+periodLbl+'.</p>'+
+    '<p class="page-sub">Tap "+ Add" to log a voucher handed out today, or "− Remove" to undo the most recent one. Use "Given by other crew" for vouchers someone else handed out that you need to record manually.</p>'+
     '<div class="sheet-card">'+
       '<div class="sheet-title">Crew Internet Vouchers</div>'+
       '<div class="sheet-meta">'+
@@ -4067,9 +4098,9 @@ var qrcode = function() {
         '<div class="lbl">DATE:</div><div>'+fmtSheetDate(now)+'</div>'+
       '</div>'+
       '<div class="sheet-table-wrap">'+
-      '<table class="sheet-table"><thead><tr><th>No.</th><th>Name</th><th>Vouchers<br>Received</th><th>Add</th></tr></thead><tbody>'+
+      '<table class="sheet-table"><thead><tr><th>No.</th><th>Name</th><th>Vouchers<br>Received</th><th>Given by<br>other crew</th><th>Total</th><th>Add / Remove</th></tr></thead><tbody>'+
         rows+
-        '<tr class="total-row"><td colspan="2" class="center">TOTAL:</td><td class="center">'+distributed+'</td><td></td></tr>'+
+        '<tr class="total-row"><td colspan="2" class="center">TOTAL:</td><td class="center">'+loggedTotal+'</td><td class="center">'+manualTotal+'</td><td class="center">'+distributed+'</td><td></td></tr>'+
       '</tbody></table>'+
       '</div>'+
       '<table class="sheet-balance">'+
@@ -4547,8 +4578,14 @@ var qrcode = function() {
     main.querySelectorAll('[data-give-voucher]').forEach(function(el){
       el.addEventListener('click', function(){ giveVoucher(el.dataset.giveVoucher); });
     });
+    main.querySelectorAll('[data-remove-voucher-for]').forEach(function(el){
+      el.addEventListener('click', function(){ removeLastVoucherForCrew(el.dataset.removeVoucherFor); });
+    });
     main.querySelectorAll('[data-del-voucher]').forEach(function(el){
       el.addEventListener('click', function(){ removeVoucher(el.dataset.delVoucher); });
+    });
+    main.querySelectorAll('[data-voucher-manual]').forEach(function(el){
+      el.addEventListener('change', function(){ updateVoucherManual(el.dataset.voucherManual, el.value); });
     });
 
     var voucherVessel = document.getElementById('voucherVessel');
@@ -5380,6 +5417,28 @@ var qrcode = function() {
     if(!confirm('Remove this voucher record?')) return;
     state.vouchers = state.vouchers.filter(function(v){return v.id!==id;});
     await storageSet('vouchers', state.vouchers);
+    render();
+  }
+
+  async function removeLastVoucherForCrew(crewId){
+    var periodKey = monthKey(new Date());
+    var candidates = state.vouchers.filter(function(v){
+      return v.crewId === crewId && monthKey(new Date(v.dateISO)) === periodKey;
+    });
+    if(!candidates.length) return;
+    var latest = candidates.reduce(function(a,b){ return new Date(a.dateISO) > new Date(b.dateISO) ? a : b; });
+    state.vouchers = state.vouchers.filter(function(v){ return v.id !== latest.id; });
+    await storageSet('vouchers', state.vouchers);
+    render();
+  }
+
+  async function updateVoucherManual(crewId, rawVal){
+    var val = parseInt(rawVal, 10);
+    if(isNaN(val) || val < 0) val = 0;
+    var periodKey = monthKey(new Date());
+    state.voucherManual[periodKey] = state.voucherManual[periodKey] || {};
+    state.voucherManual[periodKey][crewId] = val;
+    await storageSet('voucherManual', state.voucherManual);
     render();
   }
 
